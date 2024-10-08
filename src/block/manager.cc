@@ -76,7 +76,8 @@ auto BlockManager::write_block(block_id_t block_id, const u8 *data)
     -> ChfsNullResult {
   
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  const char *ptr = (char*)&(this->block_data[block_id * block_sz]);
+  memcpy((char*)ptr, (char*)data, this->block_sz);
 
   return KNullOk;
 }
@@ -86,7 +87,9 @@ auto BlockManager::write_partial_block(block_id_t block_id, const u8 *data,
     -> ChfsNullResult {
   
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  const u8 *ptr = &(this->block_data[block_id * block_sz]);
+  const u8 *data_ptr = data + offset;
+  memcpy((char*)ptr, (char*)data_ptr, len);
 
   return KNullOk;
 }
@@ -94,7 +97,8 @@ auto BlockManager::write_partial_block(block_id_t block_id, const u8 *data,
 auto BlockManager::read_block(block_id_t block_id, u8 *data) -> ChfsNullResult {
 
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  char *ptr = (char*)&(this->block_data[block_id * block_sz]);
+  memcpy((char*)data, ptr, this->block_sz);
 
   return KNullOk;
 }
@@ -102,7 +106,7 @@ auto BlockManager::read_block(block_id_t block_id, u8 *data) -> ChfsNullResult {
 auto BlockManager::zero_block(block_id_t block_id) -> ChfsNullResult {
   
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  memset(this->block_data + (this->block_sz * block_id), '\0', this->block_sz);
 
   return KNullOk;
 }

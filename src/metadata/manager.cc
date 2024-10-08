@@ -100,7 +100,14 @@ auto InodeManager::allocate_inode(InodeType type, block_id_t bid)
       // 3. Return the id of the allocated inode.
       //    You may have to use the `RAW_2_LOGIC` macro
       //    to get the result inode id.
-      UNIMPLEMENTED();
+      Inode inode = Inode(type, bm->block_size());
+      u8 buffer[sizeof(Inode)];
+      *(Inode*)buffer = inode;
+      bm->write_block(bid, buffer);
+
+      set_table(free_idx.value(), bid);
+      
+      return ChfsResult<inode_id_t>(RAW_2_LOGIC(free_idx.value()));
     }
   }
 
@@ -113,8 +120,13 @@ auto InodeManager::set_table(inode_id_t idx, block_id_t bid) -> ChfsNullResult {
   // TODO: Implement this function.
   // Fill `bid` into the inode table entry
   // whose index is `idx`.
-  UNIMPLEMENTED();
-
+  usize table_id = idx / n_table_blocks;
+  usize t_id = idx % n_table_blocks;
+  u8 *data = new u8[bm->block_size()];
+  bm->read_block(1 + table_id, data);
+  u64* write_bid_ptr = ((u64*)(data) + t_id);
+  *write_bid_ptr = bid;
+  bm->write_block(1 + table_id, data);
   return KNullOk;
 }
 
@@ -127,7 +139,12 @@ auto InodeManager::get(inode_id_t id) -> ChfsResult<block_id_t> {
   // from the inode table. You may have to use
   // the macro `LOGIC_2_RAW` to get the inode
   // table index.
-  UNIMPLEMENTED();
+  inode_id_t inode_table_id = LOGIC_2_RAW(id);
+  usize table_id = inode_table_id / n_table_blocks;
+  usize t_id = inode_table_id % n_table_blocks;
+  u8 *data = new u8[bm->block_size()];
+  bm->read_block(1 + table_id, data);
+  res_block_id = *((u64*)(data) + t_id);
 
   return ChfsResult<block_id_t>(res_block_id);
 }
@@ -223,7 +240,17 @@ auto InodeManager::free_inode(inode_id_t id) -> ChfsNullResult {
   //    You may have to use macro `LOGIC_2_RAW`
   //    to get the index of inode table from `id`.
   // 2. Clear the inode bitmap.
-  UNIMPLEMENTED();
+  inode_id_t raw_id = LOGIC_2_RAW(id);
+  set_table(raw_id, 0);
+
+  usize bitmap_table_id = 1 + n_table_blocks + raw_id / (bm->block_size() * 8);
+  usize bitmap_id = raw_id % (bm->block_size() * 8);
+  std::vector<u8> buffer(bm->block_size());
+  
+  bm->read_block(bitmap_table_id, buffer.data());
+  Bitmap(buffer.data(), bm->block_size()).clear(bitmap_id);
+  bm->write_block(bitmap_table_id, buffer.data());
+  
 
   return KNullOk;
 }
