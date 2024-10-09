@@ -58,14 +58,25 @@ void parse_directory(std::string &src, std::list<DirectoryEntry> &list) {
   std::string segment;
   std::string name;
   std::string inode;
-  
+
+  bool is_first = std::find(src.begin(), src.end(), '/') == src.end();
+
+  if(is_first) {
+    if(std::getline(iss, name, ':') && std::getline(iss, inode)) {
+        list.push_back({name, std::stoull(inode)});
+    }
+    return;
+  }
+
   while(std::getline(iss, segment, '/')) {
+    is_first = false;
     std::istringstream segment_ss(segment);
 
     if(std::getline(segment_ss, name, ':') && std::getline(segment_ss, inode)) {
         list.push_back({name, std::stoull(inode)});
     }
   }
+
 
 }
 
@@ -98,7 +109,8 @@ auto read_directory(FileOperation *fs, inode_id_t id,
                     std::list<DirectoryEntry> &list) -> ChfsNullResult {
   
   // TODO: Implement this function.
-  std::string file_content(fs->read_file(id).unwrap().begin(), fs->read_file(id).unwrap().end());
+  std::vector<u8> dir = fs->read_file(id).unwrap();
+  std::string file_content(dir.begin(), dir.end());
 
   parse_directory(file_content, list);
 
@@ -111,16 +123,15 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
   std::list<DirectoryEntry> list;
 
   // TODO: Implement this function.
-  block_id_t bid = inode_manager_->get(id).unwrap();
-  std::vector<u8> buffer;
-  buffer.reserve(block_manager_->block_size());
-  block_manager_->read_block(bid, buffer.data());
-  std::string dir(buffer.begin(), buffer.end());
-  parse_directory(dir, list);
-  for(auto it: list) {
-    if(it.name.compare(name) == 0) {
-       return ChfsResult<inode_id_t>(it.id);
-    }
+  std::vector<u8> src = read_file(id).unwrap();
+  std::string dir_string(src.begin(), src.end());
+  parse_directory(dir_string, list);
+  auto iter = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
+    return entry.name.compare(name) == 0;
+  });
+  bool is_exist = iter != list.end();
+  if(is_exist) {
+    return ChfsResult<inode_id_t>(iter->id);
   }
 
   return ChfsResult<inode_id_t>(ErrorType::NotExist);
@@ -135,25 +146,24 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   //    If already exist, return ErrorType::AlreadyExist.
   // 2. Create the new inode.
   // 3. Append the new entry to the parent directory.
-  block_id_t bid = inode_manager_->get(id).unwrap();
-  std::vector<u8> buffer;
-  buffer.reserve(block_manager_->block_size());
-  block_manager_->read_block(bid, buffer.data());
-  std::string dir(buffer.begin(), buffer.end());
-  parse_directory(dir, list);
-  for(auto it: list) {
-    if(it.name.compare(name) == 0) {
-       return ChfsResult<inode_id_t>(ErrorType::AlreadyExist);
-    }
+  std::vector<u8> src = read_file(id).unwrap();
+  std::string dir_string(src.begin(), src.end());
+  parse_directory(dir_string, list);
+  bool is_exist = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
+    return entry.name.compare(name) == 0;
+  }) != list.end();
+  if(is_exist) {
+    return ChfsResult<inode_id_t>(ErrorType::AlreadyExist);
   }
   block_id_t alloc_bid = block_allocator_->allocate().unwrap();
-  block_id_t iid = inode_manager_->allocate_inode(type, alloc_bid).unwrap();
-  list.push_back({name, iid});
-  dir = dir_list_to_string(list);
-  buffer.insert(buffer.begin(), dir.begin(), dir.end());
-  block_manager_->write_block(bid, buffer.data());
+  block_id_t new_id = inode_manager_->allocate_inode(type, alloc_bid).unwrap();
+  list.push_back({name, new_id});
+  dir_string = dir_list_to_string(list);
+  std::fill(src.begin(), src.end(), '\0');
+  src.assign(dir_string.begin(), dir_string.end());
+  write_file(id, src);
 
-  return ChfsResult<inode_id_t>(static_cast<inode_id_t>(iid));
+  return ChfsResult<inode_id_t>(static_cast<inode_id_t>(new_id));
 }
 
 // {Your code here}
@@ -163,21 +173,20 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   // TODO: 
   // 1. Remove the file, you can use the function `remove_file`
   // 2. Remove the entry from the directory.
-  block_id_t bid = inode_manager_->get(parent).unwrap();
-  std::vector<u8> buffer;
-  buffer.reserve(block_manager_->block_size());
-  block_manager_->read_block(bid, buffer.data());
-  std::string dir(buffer.begin(), buffer.end());
-  parse_directory(dir, list);
-  for(auto it: list) {
-    if(it.name.compare(name) == 0) {
-      remove_file(it.id);
-      list.remove_if([it](DirectoryEntry entry) {
-        return it.name == entry.name;
-      });
-      break;
-    }
+  std::vector<u8> src = read_file(parent).unwrap();
+  std::string dir_string(src.begin(), src.end());
+  parse_directory(dir_string, list);
+  auto iter = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
+    return entry.name.compare(name) == 0;
+  });
+  bool not_exist = iter == list.end();
+  if(not_exist) {
+    return ChfsNullResult(ErrorType::NotExist);
   }
+  remove_file(iter->id);
+  list.remove_if([name](DirectoryEntry entry){
+    return entry.name.compare(name) == 0;
+  });
   
   return KNullOk;
 }
