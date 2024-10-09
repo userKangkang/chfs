@@ -187,6 +187,10 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   list.remove_if([name](DirectoryEntry entry){
     return entry.name.compare(name) == 0;
   });
+  dir_string = dir_list_to_string(list);
+  std::fill(src.begin(), src.end(), '\0');
+  src.assign(dir_string.begin(), dir_string.end());
+  write_file(parent, src);
   
   return KNullOk;
 }
