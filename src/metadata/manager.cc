@@ -103,7 +103,7 @@ auto InodeManager::allocate_inode(InodeType type, block_id_t bid)
       Inode inode = Inode(type, bm->block_size());
       u8 buffer[sizeof(Inode)];
       *(Inode*)buffer = inode;
-      bm->write_block(bid, buffer);
+      bm->write_partial_block(bid, buffer, 0, sizeof(Inode));
 
       set_table(free_idx.value(), bid);
       
@@ -120,8 +120,9 @@ auto InodeManager::set_table(inode_id_t idx, block_id_t bid) -> ChfsNullResult {
   // TODO: Implement this function.
   // Fill `bid` into the inode table entry
   // whose index is `idx`.
-  usize table_id = idx / n_table_blocks;
-  usize t_id = idx % n_table_blocks;
+  usize bid_per_table = bm->block_size() / sizeof(inode_id_t);
+  usize table_id = idx / bid_per_table;
+  usize t_id = idx % bid_per_table;
   u8 *data = new u8[bm->block_size()];
   bm->read_block(1 + table_id, data);
   u64* write_bid_ptr = ((u64*)(data) + t_id);
@@ -140,8 +141,9 @@ auto InodeManager::get(inode_id_t id) -> ChfsResult<block_id_t> {
   // the macro `LOGIC_2_RAW` to get the inode
   // table index.
   inode_id_t inode_table_id = LOGIC_2_RAW(id);
-  usize table_id = inode_table_id / n_table_blocks;
-  usize t_id = inode_table_id % n_table_blocks;
+  usize bid_per_table = bm->block_size() / sizeof(inode_id_t);
+  usize table_id = inode_table_id / bid_per_table;
+  usize t_id = inode_table_id % bid_per_table;
   u8 *data = new u8[bm->block_size()];
   bm->read_block(1 + table_id, data);
   res_block_id = *((u64*)(data) + t_id);

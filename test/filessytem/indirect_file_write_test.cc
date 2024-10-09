@@ -66,8 +66,6 @@ TEST(FileSystemTest, WriteLargeFile) {
       auto res = fs.read_file(id);
       ASSERT_TRUE(res.is_ok());
       auto res_data = res.unwrap();
-      std::cout << res_data.data() << std::endl;
-      std::cout << contents[id].data() << std::endl;
       auto check = vec_equal(res_data, contents[id]);
       ASSERT_TRUE(check);
     }

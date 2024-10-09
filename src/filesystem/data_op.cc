@@ -1,6 +1,7 @@
 #include <ctime>
 
 #include "filesystem/operations.h"
+#include <algorithm>
 
 namespace chfs {
 
@@ -75,6 +76,7 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
   auto inlined_blocks_num = 0;
 
   auto inode_res = this->inode_manager_->read_inode(id, inode);
+
   if (inode_res.is_err()) {
     error_code = inode_res.unwrap_error();
     // I know goto is bad, but we have no choice
@@ -96,6 +98,7 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
   new_block_num = calculate_block_sz(content.size(), block_size);
 
   if (new_block_num > old_block_num) {
+    // std::cout << "allocation blocks" << std::endl;
     // If we need to allocate more blocks.
     for (usize idx = old_block_num; idx < new_block_num; ++idx) {
 
@@ -110,14 +113,15 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
         inode_p->set_block_direct(idx, bid);
       }
       else {
-        usize inode_block_num = inode_p->get_direct_block_num();
         block_id_t bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
-        auto indirect_inode_p = reinterpret_cast<Inode *>(indirect_block.data());
+        auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
         block_manager_->read_block(bid, indirect_block.data());
         for(; idx < new_block_num; idx++) {
-          block_id_t bid = block_allocator_->allocate().unwrap();
-          indirect_inode_p->set_block_direct(idx - inode_block_num, bid);
+          block_id_t allo_bid = block_allocator_->allocate().unwrap();
+          indirect_inode_p[idx - inlined_blocks_num] = allo_bid;
+          // std::cout << allo_bid << " ";
         }
+        block_manager_->write_block(bid, indirect_block.data());
       }
     }
 
@@ -134,15 +138,15 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
       } else {
 
         // TODO: Free the indirect extra block.
-        usize direct_block_num = inode_p->get_direct_block_num();
         block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
-        auto indirect_inode_p = reinterpret_cast<Inode *>(indirect_block.data());
+        auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
         block_manager_->read_block(indirect_bid, indirect_block.data());
         for(; idx < old_block_num; ++idx) {
-          block_id_t bid = indirect_inode_p->blocks[idx - direct_block_num];
+          block_id_t bid = indirect_inode_p[idx - inlined_blocks_num];
           block_manager_->zero_block(bid);
           block_allocator_->deallocate(bid);
         }
+        block_manager_->write_block(indirect_bid, indirect_block.data());
       }
     }
 
@@ -169,6 +173,8 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
     auto block_idx = 0;
     u64 write_sz = 0;
 
+    // std::cout << "write_file function:" << std::endl;
+
     while (write_sz < content.size()) {
       auto sz = ((content.size() - write_sz) > block_size)
                     ? block_size
@@ -184,11 +190,10 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
       } else {
 
         // TODO: Implement getting block id of current indirect block.
-        usize inode_block_num = inode_p->get_direct_block_num();
         block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
-        auto indirect_inode_p = reinterpret_cast<Inode *>(indirect_block.data());
+        auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
         block_manager_->read_block(indirect_bid, indirect_block.data());
-        bid = indirect_inode_p->blocks[block_idx - inode_block_num];
+        bid = indirect_inode_p[block_idx - inlined_blocks_num];
 
       }
 
@@ -268,9 +273,9 @@ auto FileOperation::read_file(inode_id_t id) -> ChfsResult<std::vector<u8>> {
       // TODO: Implement the case of indirect block.
       usize inode_block_num = inode_p->get_direct_block_num();
       block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
-      auto indirect_inode_p = reinterpret_cast<Inode *>(indirect_block.data());
+      auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
       block_manager_->read_block(indirect_bid, indirect_block.data());
-      bid = indirect_inode_p->blocks[read_sz / block_size - inode_block_num];
+      bid = indirect_inode_p[read_sz / block_size - inode_block_num];
     }
 
     // TODO: Read from current block and store to `content`.
@@ -279,6 +284,7 @@ auto FileOperation::read_file(inode_id_t id) -> ChfsResult<std::vector<u8>> {
     
     read_sz += sz;
   }
+  content.resize(read_sz);
 
   return ChfsResult<std::vector<u8>>(std::move(content));
 
