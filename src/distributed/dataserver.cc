@@ -58,33 +58,38 @@ DataServer::~DataServer() { server_.reset(); }
 auto DataServer::read_data(block_id_t block_id, usize offset, usize len,
                            version_t version) -> std::vector<u8> {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  std::vector<u8> block_data;
+  block_data.resize(block_allocator_->bm->block_size());
+  block_allocator_->bm->read_block(block_id, block_data.data());
+  std::vector<u8> res_data;
+  for(usize i = offset; i < offset + len; i++) {
+    res_data.push_back(block_data[i]);
+  }
 
-  return {};
+  return res_data;
 }
 
 // {Your code here}
 auto DataServer::write_data(block_id_t block_id, usize offset,
                             std::vector<u8> &buffer) -> bool {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return false;
+  auto res = block_allocator_->bm->write_partial_block(block_id, buffer.data(), offset, buffer.size());
+  return res.is_ok();
 }
 
 // {Your code here}
 auto DataServer::alloc_block() -> std::pair<block_id_t, version_t> {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return {};
+  auto res = block_allocator_->allocate();
+  
+  return {res.is_ok(), 1};
 }
 
 // {Your code here}
 auto DataServer::free_block(block_id_t block_id) -> bool {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  auto res = block_allocator_->bm->zero_block(block_id);
 
-  return false;
+  return res.is_ok();
 }
 } // namespace chfs

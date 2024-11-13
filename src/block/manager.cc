@@ -112,9 +112,8 @@ auto BlockManager::write_partial_block(block_id_t block_id, const u8 *data,
   }
 
   // TODO: Implement this function.
-  const u8 *ptr = &(this->block_data[block_id * block_sz]);
-  const u8 *data_ptr = data + offset;
-  memcpy((char*)ptr, (char*)data_ptr, len);
+  const u8 *ptr = &(this->block_data[block_id * block_sz]) + offset; 
+  memcpy((char*)ptr, (char*)data, len);
 
   return KNullOk;
 }
