@@ -123,43 +123,79 @@ MetadataServer::MetadataServer(std::string const &address, u16 port,
 auto MetadataServer::mknode(u8 type, inode_id_t parent, const std::string &name)
     -> inode_id_t {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return 0;
+  // make a node based on its type.
+  inode_id_t inode_id = 0;
+  if(type == 1) {
+    // regular file inode must get changed in metadata server.
+    inode_id = operation_->mkfile(parent, name.data()).unwrap();
+  } else {
+    inode_id = operation_->mkdir(parent, name.data()).unwrap();
+  }
+  // inode is metadata, not need to store in data_server. 
+  
+  return inode_id;
 }
 
 // {Your code here}
 auto MetadataServer::unlink(inode_id_t parent, const std::string &name)
     -> bool {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  auto res = operation_->unlink(parent, name.data()).is_ok();
+  // if not ok, this is a directory... then?
 
-  return false;
+  return res;
 }
 
 // {Your code here}
 auto MetadataServer::lookup(inode_id_t parent, const std::string &name)
     -> inode_id_t {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  inode_id_t inode_id = operation_->lookup(parent, name.data()).unwrap();
 
-  return 0;
+  return inode_id;
 }
 
 // {Your code here}
 auto MetadataServer::get_block_map(inode_id_t id) -> std::vector<BlockInfo> {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  // get the block id of metadata server.
+  block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
+  // read the inode data
+  usize block_size = operation_->block_manager_->block_size();
+  u8 inode_data[block_size];
+  operation_->block_manager_->read_block(metadata_bid, inode_data);
+  Inode *inode_ptr = (Inode*)(inode_data);
 
-  return {};
+  usize block_num = inode_ptr->get_block_map_num_metadata();
+  std::vector<BlockInfo> res;
+  for(int i = 0; i < block_num; i++) {
+    res.push_back(inode_ptr->get_tuple_metadata(i));
+  }
+
+  return res;
 }
 
 // {Your code here}
 auto MetadataServer::allocate_block(inode_id_t id) -> BlockInfo {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return {};
+  // allocate blocks in one data server first.
+  mac_id_t randomed_mac_id = generator.rand(1, num_data_servers);
+  auto res = clients_[randomed_mac_id]->call("alloc_block");
+  // get return result.
+  auto pair = res.unwrap()->as<std::pair<block_id_t, version_t>>();
+  // get the block id of metadata server.
+  block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
+  // read the inode data
+  usize block_size = operation_->block_manager_->block_size();
+  u8 inode_data[block_size];
+  operation_->block_manager_->read_block(metadata_bid, inode_data);
+  Inode *inode_ptr = (Inode*)(inode_data);
+  // how to check the inode's block array's current index?
+  // maybe we should fold it in the `Inode`
+  inode_ptr->set_block_direct_metadata(pair.first, randomed_mac_id, pair.second);
+  operation_->block_manager_->write_block(metadata_bid, inode_data);
+  
+  return {metadata_bid, randomed_mac_id, pair.second};
 }
 
 // {Your code here}

@@ -226,6 +226,29 @@ public:
   auto begin() -> InodeIterator;
   auto end() -> InodeIterator;
 
+  // functions set for lab2's metadata server.
+  // we suppose that the blocks with even index store block_id,
+  // while ones with odd index store <mac_id, version>
+
+  auto set_block_direct_metadata(block_id_t bid, mac_id_t mid, version_t version) {
+    usize idx = inner_attr.size / block_size;
+    this->blocks[idx] = bid;
+    block_id_t tuple_data = mid;
+    tuple_data = (tuple_data << 32) | version;
+    this->blocks[idx + 1] = tuple_data;
+
+    inner_attr.size += block_size;
+  }
+
+  auto get_block_map_num_metadata() -> usize {
+    return inner_attr.size / block_size;
+  }
+
+  auto get_tuple_metadata(usize idx) -> std::tuple<block_id_t, mac_id_t, version_t> {
+    return {blocks[idx], (u32)(blocks[idx + 1] >> 32), (u32)blocks[idx + 1]};
+  }
+
+
 } __attribute__((packed));
 
 static_assert(sizeof(Inode) == sizeof(FileAttr) + sizeof(InodeType) +
