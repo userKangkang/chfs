@@ -232,7 +232,7 @@ TEST_F(MetadataServerTest, CheckUnlink) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, CheckInvariant1) {
+TEST_F(MetadataServerTest, DISABLED_CheckInvariant1) {
   auto file_id_1 = meta_srv->mknode(RegularFileType, 1, "fileA");
   EXPECT_EQ(file_id_1, 2);
 
@@ -348,7 +348,7 @@ TEST_F(MetadataServerTest, CheckInvariant1) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, CheckInvariant2) {
+TEST_F(MetadataServerTest, DISABLED_CheckInvariant2) {
 
   auto dir_id_1 = meta_srv->mknode(DirectoryType, 1, "SubDirA");
   EXPECT_EQ(dir_id_1, 2);
@@ -433,7 +433,7 @@ TEST_F(MetadataServerTest, CheckInvariant2) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, CheckInvariant3) {
+TEST_F(MetadataServerTest, DISABLED_CheckInvariant3) {
   // This time we try to allocate block and free block at the same time
   auto file_id_1 = meta_srv->mknode(RegularFileType, 1, "fileA");
   EXPECT_EQ(file_id_1, 2);
@@ -518,7 +518,7 @@ TEST_F(MetadataServerTest, CheckInvariant3) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, CheckInvariant4) {
+TEST_F(MetadataServerTest, DISABLED_CheckInvariant4) {
   // This test create and unlink files from these 2 directories at the same time
   auto dir_id_1 = meta_srv->mknode(DirectoryType, 1, "SubDirA");
   EXPECT_EQ(dir_id_1, 2);

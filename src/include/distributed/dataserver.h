@@ -116,9 +116,33 @@ public:
    */
   auto free_block(block_id_t block_id) -> bool;
 
+  /**
+   * A RPC handler for client server. Return the block size.
+   * 
+   * @return: Block size.
+   */
+  auto get_block_size() -> usize;
+
+  /**
+   * Get block version of certain block
+   * 
+   * @param bid: Block id
+   * 
+   * @return: Block version.
+   */
+  auto get_block_version(block_id_t bid) -> version_t;
+
+  /**
+   * Update block version of certain block
+   * 
+   * @param bid: Block id
+   */
+  auto update_block_version(block_id_t bid, version_t version) -> void;
+
 private:
   std::unique_ptr<RpcServer> server_;
   std::shared_ptr<BlockAllocator> block_allocator_;
+  std::vector<block_id_t> version_blocks;
 };
 
 } // namespace chfs

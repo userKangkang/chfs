@@ -150,9 +150,9 @@ auto MetadataServer::unlink(inode_id_t parent, const std::string &name)
 auto MetadataServer::lookup(inode_id_t parent, const std::string &name)
     -> inode_id_t {
   // TODO: Implement this function.
-  inode_id_t inode_id = operation_->lookup(parent, name.data()).unwrap();
+  auto res = operation_->lookup(parent, name.data());
 
-  return inode_id;
+  return res.is_ok() ? res.unwrap() : 0;
 }
 
 // {Your code here}
@@ -168,7 +168,7 @@ auto MetadataServer::get_block_map(inode_id_t id) -> std::vector<BlockInfo> {
 
   usize block_num = inode_ptr->get_block_map_num_metadata();
   std::vector<BlockInfo> res;
-  for(int i = 0; i < block_num; i++) {
+  for(int i = 0; i < block_num; i += 2) {
     res.push_back(inode_ptr->get_tuple_metadata(i));
   }
 
@@ -195,34 +195,60 @@ auto MetadataServer::allocate_block(inode_id_t id) -> BlockInfo {
   inode_ptr->set_block_direct_metadata(pair.first, randomed_mac_id, pair.second);
   operation_->block_manager_->write_block(metadata_bid, inode_data);
   
-  return {metadata_bid, randomed_mac_id, pair.second};
+  return {pair.first, randomed_mac_id, pair.second};
 }
 
 // {Your code here}
 auto MetadataServer::free_block(inode_id_t id, block_id_t block_id,
                                 mac_id_t machine_id) -> bool {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return false;
+  // free block in data server.
+  auto free_data_server = clients_[machine_id]->call("free_block", block_id);
+  auto data_res = free_data_server.unwrap()->as<bool>();
+  if(!data_res) {
+    std::cout << "can't free block in data server." << std::endl;
+    return false;
+  }
+  // free block in metadata server.
+  // get the block id of metadata server.
+  block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
+  // read the inode data
+  usize block_size = operation_->block_manager_->block_size();
+  u8 inode_data[block_size];
+  operation_->block_manager_->read_block(metadata_bid, inode_data);
+  Inode *inode_ptr = (Inode*)(inode_data);
+  bool metadata_res = inode_ptr->free_certain_block(block_id, machine_id);
+  operation_->block_manager_->write_block(metadata_bid, inode_data);
+  return metadata_res;
 }
 
 // {Your code here}
 auto MetadataServer::readdir(inode_id_t node)
     -> std::vector<std::pair<std::string, inode_id_t>> {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  std::list<chfs::DirectoryEntry> read_res;
+  read_directory(operation_.get(), node, read_res);
 
-  return {};
+  std::vector<std::pair<std::string, inode_id_t>> return_res;
+  for(auto entry: read_res) {
+    return_res.push_back({entry.name, entry.id});
+  }
+
+  return return_res;
 }
 
 // {Your code here}
 auto MetadataServer::get_type_attr(inode_id_t id)
     -> std::tuple<u64, u64, u64, u64, u8> {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-
-  return {};
+  block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
+  // read the inode data
+  usize block_size = operation_->block_manager_->block_size();
+  u8 inode_data[block_size];
+  operation_->block_manager_->read_block(metadata_bid, inode_data);
+  Inode *inode_ptr = (Inode*)(inode_data);
+  FileAttr attr = inode_ptr->get_attr();
+  return {attr.size, attr.atime, attr.ctime, attr.mtime, (u8)inode_ptr->get_type()};
 }
 
 auto MetadataServer::reg_server(const std::string &address, u16 port,

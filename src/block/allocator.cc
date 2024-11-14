@@ -155,8 +155,16 @@ auto BlockAllocator::deallocate(block_id_t block_id) -> ChfsNullResult {
   }
   bitmap.clear(bit_id);
   bm->write_block(id, buffer.data());
-
   return KNullOk;
 }
 
+auto BlockAllocator::check_valid(block_id_t block_id) -> bool {
+  std::vector<u8> buffer(bm->block_size());
+  block_id_t id = block_id / (bm->block_size() * 8) + this->bitmap_block_id;
+  bm->read_block(id, buffer.data());
+  Bitmap bitmap = Bitmap(buffer.data(), bm->block_size());
+  usize bit_id = block_id % (bm->block_size() * 8);
+  bool flag = bitmap.check(bit_id);
+  return flag;
+}
 } // namespace chfs
