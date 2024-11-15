@@ -130,6 +130,7 @@ auto BlockAllocator::allocate() -> ChfsResult<block_id_t> {
       return ChfsResult<block_id_t>(retval);
     }
   }
+  std::cout << "line 133" << std::endl;
   return ChfsResult<block_id_t>(ErrorType::OUT_OF_RESOURCE);
 }
 

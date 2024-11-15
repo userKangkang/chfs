@@ -232,7 +232,7 @@ TEST_F(MetadataServerTest, CheckUnlink) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, DISABLED_CheckInvariant1) {
+TEST_F(MetadataServerTest, CheckInvariant1) {
   auto file_id_1 = meta_srv->mknode(RegularFileType, 1, "fileA");
   EXPECT_EQ(file_id_1, 2);
 

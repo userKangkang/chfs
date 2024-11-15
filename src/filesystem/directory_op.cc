@@ -109,10 +109,17 @@ auto read_directory(FileOperation *fs, inode_id_t id,
                     std::list<DirectoryEntry> &list) -> ChfsNullResult {
   
   // TODO: Implement this function.
-  std::vector<u8> dir = fs->read_file(id).unwrap();
+  std::stack<block_id_t> file_blocks;
+
+  std::vector<u8> dir = fs->read_file(id, file_blocks).unwrap();
   std::string file_content(dir.begin(), dir.end());
 
   parse_directory(file_content, list);
+
+  while(!file_blocks.empty()) {
+    fs->unlock_opr(file_blocks.top());
+    file_blocks.pop();
+  }
 
   return KNullOk;
 }
@@ -123,7 +130,9 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
   std::list<DirectoryEntry> list;
 
   // TODO: Implement this function.
-  std::vector<u8> src = read_file(id).unwrap();
+  std::stack<block_id_t> file_blocks;
+
+  std::vector<u8> src = read_file(id, file_blocks).unwrap();
   std::string dir_string(src.begin(), src.end());
   parse_directory(dir_string, list);
   auto iter = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
@@ -132,6 +141,11 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
   bool is_exist = iter != list.end();
   if(is_exist) {
     return ChfsResult<inode_id_t>(iter->id);
+  }
+
+  while(!file_blocks.empty()) {
+    unlock_opr(file_blocks.top());
+    file_blocks.pop();
   }
 
   return ChfsResult<inode_id_t>(ErrorType::NotExist);
@@ -146,22 +160,35 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   //    If already exist, return ErrorType::AlreadyExist.
   // 2. Create the new inode.
   // 3. Append the new entry to the parent directory.
-  std::vector<u8> src = read_file(id).unwrap();
+  std::stack<block_id_t> file_blocks;
+
+  std::vector<u8> src = read_file(id, file_blocks).unwrap();
+  std::cout << "line 166" << std::endl;
   std::string dir_string(src.begin(), src.end());
   parse_directory(dir_string, list);
   bool is_exist = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
     return entry.name.compare(name) == 0;
   }) != list.end();
   if(is_exist) {
+    std::cout << "line 173" << std::endl;
     return ChfsResult<inode_id_t>(ErrorType::AlreadyExist);
   }
+  // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
   block_id_t alloc_bid = block_allocator_->allocate().unwrap();
+  std::cout << "line 177" << std::endl;
+  emplace_opr(alloc_bid);
   block_id_t new_id = inode_manager_->allocate_inode(type, alloc_bid).unwrap();
+  std::cout << "line 180" << std::endl;
   list.push_back({name, new_id});
   dir_string = dir_list_to_string(list);
   std::fill(src.begin(), src.end(), '\0');
   src.assign(dir_string.begin(), dir_string.end());
   write_file(id, src);
+
+  while(!file_blocks.empty()) {
+    unlock_opr(file_blocks.top());
+    file_blocks.pop();
+  }
 
   return ChfsResult<inode_id_t>(static_cast<inode_id_t>(new_id));
 }
@@ -173,7 +200,9 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   // TODO: 
   // 1. Remove the file, you can use the function `remove_file`
   // 2. Remove the entry from the directory.
-  std::vector<u8> src = read_file(parent).unwrap();
+  std::stack<block_id_t> file_blocks;
+
+  std::vector<u8> src = read_file(parent, file_blocks).unwrap();
   std::string dir_string(src.begin(), src.end());
   parse_directory(dir_string, list);
   auto iter = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
@@ -183,7 +212,7 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   if(not_exist) {
     return ChfsNullResult(ErrorType::NotExist);
   }
-  remove_file(iter->id);
+  remove_file(iter->id, file_blocks);
   list.remove_if([name](DirectoryEntry entry){
     return entry.name.compare(name) == 0;
   });
@@ -191,6 +220,11 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   std::fill(src.begin(), src.end(), '\0');
   src.assign(dir_string.begin(), dir_string.end());
   write_file(parent, src);
+
+  while(!file_blocks.empty()) {
+    unlock_opr(file_blocks.top());
+    file_blocks.pop();
+  }
   
   return KNullOk;
 }

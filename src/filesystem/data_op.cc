@@ -40,7 +40,15 @@ auto calculate_block_sz(u64 file_sz, u64 block_sz) -> u64 {
 
 auto FileOperation::write_file_w_off(inode_id_t id, const char *data, u64 sz,
                                      u64 offset) -> ChfsResult<u64> {
-  auto read_res = this->read_file(id);
+  std::stack<block_id_t> s;
+  
+  auto read_res = this->read_file(id, s);
+
+  while(s.empty()) {
+    unlock_opr(s.top());
+    s.pop();
+  }
+
   if (read_res.is_err()) {
     return ChfsResult<u64>(read_res.unwrap_error());
   }
@@ -233,7 +241,7 @@ err_ret:
 }
 
 // {Your code here}
-auto FileOperation::read_file(inode_id_t id) -> ChfsResult<std::vector<u8>> {
+auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsResult<std::vector<u8>> {
   auto error_code = ErrorType::DONE;
   std::vector<u8> content;
 
@@ -248,14 +256,24 @@ auto FileOperation::read_file(inode_id_t id) -> ChfsResult<std::vector<u8>> {
   u64 file_sz = 0;
   u64 read_sz = 0;
 
+  // indirect read?
+  bool indirect_read = false;
+  
+  v.push(999); // inode.
+  lock_opr(999);
+
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
     error_code = inode_res.unwrap_error();
     // I know goto is bad, but we have no choice
     goto err_ret;
   }
-
+  std::cout << "line 271." << std::endl;
+  v.push(inode_res.unwrap());
+  lock_opr(inode_res.unwrap());
+  std::cout << "line 274." << std::endl;
   file_sz = inode_p->get_size();
+  std::cout << "line 276." << std::endl;
   content.reserve(file_sz);
 
   // Now read the file
@@ -269,19 +287,30 @@ auto FileOperation::read_file(inode_id_t id) -> ChfsResult<std::vector<u8>> {
     if (inode_p->is_direct_block(read_sz / block_size)) {
       // TODO: Implement the case of direct block.
       bid = inode_p->blocks[read_sz / block_size];
+      std::cout << "line 290." << std::endl;
     } else {
       // TODO: Implement the case of indirect block.
       usize inode_block_num = inode_p->get_direct_block_num();
       block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
       auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
+      std::cout << "line 296." << std::endl;
+      if(!indirect_read) {
+        indirect_read = true;
+        v.push(indirect_bid);
+        lock_opr(indirect_bid);
+      }
+      std::cout << "line 300." << std::endl;
       block_manager_->read_block(indirect_bid, indirect_block.data());
       bid = indirect_inode_p[read_sz / block_size - inode_block_num];
     }
 
     // TODO: Read from current block and store to `content`.
+    v.push(bid);
+    lock_opr(bid);
+    std::cout << "line 310." << std::endl;
     block_manager_->read_block(bid, buffer.data());
     content.insert(content.end(), buffer.begin(), buffer.end());
-    
+    std::cout << "line 313." << std::endl;
     read_sz += sz;
   }
   content.resize(read_sz);
@@ -294,7 +323,15 @@ err_ret:
 
 auto FileOperation::read_file_w_off(inode_id_t id, u64 sz, u64 offset)
     -> ChfsResult<std::vector<u8>> {
-  auto res = read_file(id);
+  std::stack<block_id_t> s;
+
+  auto res = read_file(id, s);
+  
+  while(s.empty()) {
+    unlock_opr(s.top());
+    s.pop();
+  }
+
   if (res.is_err()) {
     return res;
   }
@@ -311,7 +348,16 @@ auto FileOperation::resize(inode_id_t id, u64 sz) -> ChfsResult<FileAttr> {
   }
 
   auto attr = attr_res.unwrap();
-  auto file_content = this->read_file(id);
+
+  std::stack<block_id_t> s;
+
+  auto file_content = this->read_file(id, s);
+
+  while(s.empty()) {
+    unlock_opr(s.top());
+    s.pop();
+  }
+
   if (file_content.is_err()) {
     return ChfsResult<FileAttr>(file_content.unwrap_error());
   }

@@ -73,6 +73,13 @@ inline auto MetadataServer::init_fs(const std::string &data_path) {
     CHFS_ASSERT(init_res.unwrap() == 1, "Bad initialization on root dir.");
   }
 
+  two_phase_locks = std::make_shared<std::map<block_id_t, std::mutex>>();
+
+  (*two_phase_locks)[999]; // inode lock.
+  (*two_phase_locks)[1]; // bitmap lock.
+
+  operation_->set_2PL(two_phase_locks);
+
   running = false;
   num_data_servers =
       0; // Default no data server. Need to call `reg_server` to add.
@@ -159,6 +166,7 @@ auto MetadataServer::lookup(inode_id_t parent, const std::string &name)
 auto MetadataServer::get_block_map(inode_id_t id) -> std::vector<BlockInfo> {
   // TODO: Implement this function.
   // get the block id of metadata server.
+  (*two_phase_locks)[999].lock();
   block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
   // read the inode data
   usize block_size = operation_->block_manager_->block_size();
@@ -171,7 +179,7 @@ auto MetadataServer::get_block_map(inode_id_t id) -> std::vector<BlockInfo> {
   for(int i = 0; i < block_num; i += 2) {
     res.push_back(inode_ptr->get_tuple_metadata(i));
   }
-
+  (*two_phase_locks)[999].unlock();
   return res;
 }
 
@@ -184,17 +192,20 @@ auto MetadataServer::allocate_block(inode_id_t id) -> BlockInfo {
   // get return result.
   auto pair = res.unwrap()->as<std::pair<block_id_t, version_t>>();
   // get the block id of metadata server.
+  (*two_phase_locks)[999].lock();
   block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
   // read the inode data
   usize block_size = operation_->block_manager_->block_size();
   u8 inode_data[block_size];
+  (*two_phase_locks)[metadata_bid].lock();
   operation_->block_manager_->read_block(metadata_bid, inode_data);
   Inode *inode_ptr = (Inode*)(inode_data);
   // how to check the inode's block array's current index?
   // maybe we should fold it in the `Inode`
   inode_ptr->set_block_direct_metadata(pair.first, randomed_mac_id, pair.second);
   operation_->block_manager_->write_block(metadata_bid, inode_data);
-  
+  (*two_phase_locks)[metadata_bid].unlock();
+  (*two_phase_locks)[999].unlock();
   return {pair.first, randomed_mac_id, pair.second};
 }
 
@@ -211,14 +222,18 @@ auto MetadataServer::free_block(inode_id_t id, block_id_t block_id,
   }
   // free block in metadata server.
   // get the block id of metadata server.
+  (*two_phase_locks)[999].lock();
   block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
   // read the inode data
   usize block_size = operation_->block_manager_->block_size();
   u8 inode_data[block_size];
+  (*two_phase_locks)[metadata_bid].lock();
   operation_->block_manager_->read_block(metadata_bid, inode_data);
   Inode *inode_ptr = (Inode*)(inode_data);
   bool metadata_res = inode_ptr->free_certain_block(block_id, machine_id);
   operation_->block_manager_->write_block(metadata_bid, inode_data);
+  (*two_phase_locks)[metadata_bid].unlock();
+  (*two_phase_locks)[999].unlock();
   return metadata_res;
 }
 
@@ -233,7 +248,6 @@ auto MetadataServer::readdir(inode_id_t node)
   for(auto entry: read_res) {
     return_res.push_back({entry.name, entry.id});
   }
-
   return return_res;
 }
 
@@ -241,13 +255,17 @@ auto MetadataServer::readdir(inode_id_t node)
 auto MetadataServer::get_type_attr(inode_id_t id)
     -> std::tuple<u64, u64, u64, u64, u8> {
   // TODO: Implement this function.
+  (*two_phase_locks)[999].lock();
   block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
   // read the inode data
   usize block_size = operation_->block_manager_->block_size();
   u8 inode_data[block_size];
+  (*two_phase_locks)[metadata_bid].lock();
   operation_->block_manager_->read_block(metadata_bid, inode_data);
   Inode *inode_ptr = (Inode*)(inode_data);
   FileAttr attr = inode_ptr->get_attr();
+  (*two_phase_locks)[metadata_bid].unlock();
+  (*two_phase_locks)[999].unlock();
   return {attr.size, attr.atime, attr.ctime, attr.mtime, (u8)inode_ptr->get_type()};
 }
 

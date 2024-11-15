@@ -18,6 +18,8 @@
 #include "metadata/manager.h"
 #include "filesystem/operations.h"
 #include "distributed/commit_log.h"
+#include <mutex>
+#include <map>
 
 namespace chfs {
 
@@ -245,6 +247,10 @@ private:
   /**
    * {You can add anything you want here}
    */
+  // All inode blocks mapped to block_id 0,
+  // All bitmap blocks mapped to block_id 1,
+  // Others mapped to their own id.
+  std::shared_ptr<std::map<block_id_t, std::mutex>> two_phase_locks;
 };
 
 } // namespace chfs
