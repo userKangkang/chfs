@@ -44,7 +44,7 @@ auto FileOperation::write_file_w_off(inode_id_t id, const char *data, u64 sz,
   
   auto read_res = this->read_file(id, s);
 
-  while(s.empty()) {
+  while(!s.empty()) {
     unlock_opr(s.top());
     s.pop();
   }
@@ -261,6 +261,7 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   
   v.push(999); // inode.
   lock_opr(999);
+  std::cout << "lock block " << v.top() << std::endl;
 
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
@@ -327,7 +328,7 @@ auto FileOperation::read_file_w_off(inode_id_t id, u64 sz, u64 offset)
 
   auto res = read_file(id, s);
   
-  while(s.empty()) {
+  while(!s.empty()) {
     unlock_opr(s.top());
     s.pop();
   }
@@ -353,7 +354,7 @@ auto FileOperation::resize(inode_id_t id, u64 sz) -> ChfsResult<FileAttr> {
 
   auto file_content = this->read_file(id, s);
 
-  while(s.empty()) {
+  while(!s.empty()) {
     unlock_opr(s.top());
     s.pop();
   }

@@ -140,11 +140,17 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
   });
   bool is_exist = iter != list.end();
   if(is_exist) {
+    while(!file_blocks.empty()) {
+      unlock_opr(file_blocks.top());
+      std::cout << "block " << file_blocks.top() << " unlock." << std::endl;
+      file_blocks.pop();
+    }
     return ChfsResult<inode_id_t>(iter->id);
   }
-
+  std::cout << "file blocks size: " << file_blocks.size() << std::endl;
   while(!file_blocks.empty()) {
     unlock_opr(file_blocks.top());
+    std::cout << "block " << file_blocks.top() << " unlock." << std::endl;
     file_blocks.pop();
   }
 
@@ -171,9 +177,14 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   }) != list.end();
   if(is_exist) {
     std::cout << "line 173" << std::endl;
+    while(!file_blocks.empty()) {
+      unlock_opr(file_blocks.top());
+      file_blocks.pop();
+    }
     return ChfsResult<inode_id_t>(ErrorType::AlreadyExist);
   }
   // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
+  lock_opr(1000); // 1000 for bitmaps.
   block_id_t alloc_bid = block_allocator_->allocate().unwrap();
   std::cout << "line 177" << std::endl;
   emplace_opr(alloc_bid);
@@ -184,7 +195,7 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   std::fill(src.begin(), src.end(), '\0');
   src.assign(dir_string.begin(), dir_string.end());
   write_file(id, src);
-
+  unlock_opr(1000);
   while(!file_blocks.empty()) {
     unlock_opr(file_blocks.top());
     file_blocks.pop();
@@ -210,6 +221,10 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   });
   bool not_exist = iter == list.end();
   if(not_exist) {
+    while(!file_blocks.empty()) {
+      unlock_opr(file_blocks.top());
+      file_blocks.pop();
+    }
     return ChfsNullResult(ErrorType::NotExist);
   }
   remove_file(iter->id, file_blocks);

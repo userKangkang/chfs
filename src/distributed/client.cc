@@ -128,16 +128,25 @@ auto ChfsClient::read_file(inode_id_t id, usize offset, usize size)
 auto ChfsClient::write_file(inode_id_t id, usize offset, std::vector<u8> data)
     -> ChfsNullResult {
   // TODO: Implement this function.
-  auto get_block_res = metadata_server_->call("get_block_map", id);
-  if(get_block_res.is_err()) {
-    return ErrorType::BadResponse;
-  }
-  std::vector<BlockInfo> data_blocks = get_block_res.unwrap()->as<std::vector<BlockInfo>>();
   usize rest_size = data.size(), block_size = data_servers_[0]->call("get_block_size").unwrap()->as<usize>();
   usize idx = offset / block_size;
   usize write_offset = offset % block_size;
   usize write_size = rest_size > block_size - write_offset ? block_size - write_offset : rest_size;
   usize vector_offset = 0;
+  std::vector<BlockInfo> data_blocks;
+
+  auto get_block_res = metadata_server_->call("get_block_map", id);
+  if(get_block_res.is_err()) {
+    return ErrorType::BadResponse;
+  }
+  data_blocks = get_block_res.unwrap()->as<std::vector<BlockInfo>>();
+
+  if(data_blocks.size() < rest_size / block_size + 1) {
+    metadata_server_->call("alloc_block", id);
+    auto get_block_res = metadata_server_->call("get_block_map", id);
+    data_blocks = get_block_res.unwrap()->as<std::vector<BlockInfo>>();
+  }
+  
   while(rest_size) {
     auto [block_id, mac_id, version] = data_blocks[idx];
     std::vector<u8> v(data.begin() + vector_offset, data.begin() + vector_offset + write_size);

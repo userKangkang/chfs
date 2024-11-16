@@ -131,9 +131,10 @@ TEST_F(MetadataServerTest, CheckPersist) {
   // Then lookup the file and then read its content
   auto lookup_res = meta_srv->lookup(1, "fileA");
   EXPECT_EQ(lookup_res, 2);
-
+  std::cout << "line 134" << std::endl;
   // Show me the block map
   auto block_map = meta_srv->get_block_map(file_id);
+  std::cout << "line 136" << std::endl;
   EXPECT_EQ(block_map.size(), 1);
   auto [orig_block_id, orig_mac_id, orig_version] = block_map[0];
   EXPECT_EQ(orig_mac_id, machine_id);
@@ -348,7 +349,7 @@ TEST_F(MetadataServerTest, CheckInvariant1) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, DISABLED_CheckInvariant2) {
+TEST_F(MetadataServerTest, CheckInvariant2) {
 
   auto dir_id_1 = meta_srv->mknode(DirectoryType, 1, "SubDirA");
   EXPECT_EQ(dir_id_1, 2);
@@ -433,7 +434,7 @@ TEST_F(MetadataServerTest, DISABLED_CheckInvariant2) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, DISABLED_CheckInvariant3) {
+TEST_F(MetadataServerTest, CheckInvariant3) {
   // This time we try to allocate block and free block at the same time
   auto file_id_1 = meta_srv->mknode(RegularFileType, 1, "fileA");
   EXPECT_EQ(file_id_1, 2);
@@ -518,7 +519,7 @@ TEST_F(MetadataServerTest, DISABLED_CheckInvariant3) {
   clean_data();
 }
 
-TEST_F(MetadataServerTest, DISABLED_CheckInvariant4) {
+TEST_F(MetadataServerTest, CheckInvariant4) {
   // This test create and unlink files from these 2 directories at the same time
   auto dir_id_1 = meta_srv->mknode(DirectoryType, 1, "SubDirA");
   EXPECT_EQ(dir_id_1, 2);
