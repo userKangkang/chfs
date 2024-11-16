@@ -138,9 +138,17 @@ auto MetadataServer::mknode(u8 type, inode_id_t parent, const std::string &name)
   inode_id_t inode_id = 0;
   if(type == 1) {
     // regular file inode must get changed in metadata server.
-    inode_id = operation_->mkfile(parent, name.data()).unwrap();
+    auto res = operation_->mkfile(parent, name.data());
+    if(res.is_err()) {
+      return false;
+    }
+    inode_id = res.unwrap();
   } else {
-    inode_id = operation_->mkdir(parent, name.data()).unwrap();
+    auto res = operation_->mkdir(parent, name.data());
+    if(res.is_err()) {
+      return false;
+    }
+    inode_id = res.unwrap();
   }
   // inode is metadata, not need to store in data_server. 
   

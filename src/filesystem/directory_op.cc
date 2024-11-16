@@ -154,7 +154,7 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
     file_blocks.pop();
   }
 
-  return ChfsResult<inode_id_t>(ErrorType::NotExist);
+  return ErrorType::NotExist;
 }
 
 // {Your code here}
@@ -181,7 +181,7 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
       unlock_opr(file_blocks.top());
       file_blocks.pop();
     }
-    return ChfsResult<inode_id_t>(ErrorType::AlreadyExist);
+    return ErrorType::AlreadyExist;
   }
   // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
   lock_opr(1000); // 1000 for bitmaps.
@@ -200,7 +200,7 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
     unlock_opr(file_blocks.top());
     file_blocks.pop();
   }
-
+  std::cout << "line 203" << std::endl;
   return ChfsResult<inode_id_t>(static_cast<inode_id_t>(new_id));
 }
 
