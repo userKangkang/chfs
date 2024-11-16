@@ -180,9 +180,25 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   }
   // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
   lock_opr(1000); // 1000 for bitmaps.
-  block_id_t alloc_bid = block_allocator_->allocate().unwrap();
+  auto alloc_bid_res = block_allocator_->allocate();
+  if(alloc_bid_res.is_err()) {
+    unlock_opr(1000);
+    while(!file_blocks.empty()) {
+      unlock_opr(file_blocks.top());
+      file_blocks.pop();
+    }
+  }
+  block_id_t alloc_bid = alloc_bid_res.unwrap();
   emplace_opr(alloc_bid);
-  block_id_t new_id = inode_manager_->allocate_inode(type, alloc_bid).unwrap();
+  auto new_id_res = inode_manager_->allocate_inode(type, alloc_bid);
+  if(new_id_res.is_err()) {
+    unlock_opr(1000);
+    while(!file_blocks.empty()) {
+      unlock_opr(file_blocks.top());
+      file_blocks.pop();
+    }
+  }
+  block_id_t new_id = new_id_res.unwrap();
   list.push_back({name, new_id});
   dir_string = dir_list_to_string(list);
   std::fill(src.begin(), src.end(), '\0');

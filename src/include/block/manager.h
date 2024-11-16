@@ -12,7 +12,7 @@
 #pragma once
 
 #include <vector>
-
+#include <memory>
 #include "common/config.h"
 #include "common/macros.h"
 #include "common/result.h"
@@ -45,9 +45,10 @@ protected:
   usize write_fail_cnt;
 
   // for redo-log.
-  usize log_start_block{0};
-  std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
-  usize log_metadata_block{0};
+  [[maybe_unused]] usize log_start_block{0};
+  [[maybe_unused]] std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
+  [[maybe_unused]] usize log_metadata_block{0};
+  [[maybe_unused]] std::shared_ptr<usize> global_txn_number_;
 
 public:
   /**
@@ -83,7 +84,12 @@ public:
    * @param block_cnt the number of blocks in the device
    * @param is_log_enabled whether to enable log
    */
-  BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled);
+  BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled
+    , std::shared_ptr<usize> global_txn_number = nullptr);
+   
+  /**
+   * Set Coomit Log.
+   */
 
   virtual ~BlockManager();
 
@@ -159,7 +165,7 @@ public:
    * @param block_id: id of modified block.
    * @param vector: modified data of the block.
    */
-  auto append_redo_log(txn_id_t txn_id, block_id_t block_id, std::vector<u8> &vector) -> void;
+  auto append_redo_log(txn_id_t txn_id, block_id_t block_id, const u8* vector) -> void;
 
   /**
    * Recover data by redo-log.

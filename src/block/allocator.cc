@@ -55,7 +55,7 @@ BlockAllocator::BlockAllocator(std::shared_ptr<BlockManager> block_manager,
 
     if (block_id != cur_block_id) {
       bm->write_block(cur_block_id, buffer.data());
-
+      
       cur_block_id = block_id;
       bitmap.zeroed();
     }
@@ -125,19 +125,18 @@ auto BlockAllocator::allocate() -> ChfsResult<block_id_t> {
       // 2. Flush the changed bitmap block back to the block manager.
       // 3. Calculate the value of `retval`.
       bitmap.set(res.value());
-      bm->write_block(i + this->bitmap_block_id, buffer.data());
+      auto write_res = bm->write_block(i + this->bitmap_block_id, buffer.data());
       retval = static_cast<block_id_t>(res.value() + i * bm->block_size() * 8);
-      return ChfsResult<block_id_t>(retval);
+      return write_res.is_ok() ?  ChfsResult<block_id_t>(retval) : write_res.unwrap_error();
     }
   }
-  std::cout << "line 133" << std::endl;
-  return ChfsResult<block_id_t>(ErrorType::OUT_OF_RESOURCE);
+  return ErrorType::OUT_OF_RESOURCE;
 }
 
 // Your implementation
 auto BlockAllocator::deallocate(block_id_t block_id) -> ChfsNullResult {
   if (block_id >= this->bm->total_blocks()) {
-    return ChfsNullResult(ErrorType::INVALID_ARG);
+    return ErrorType::INVALID_ARG;
   }
 
   // TODO: Implement this function.
@@ -152,11 +151,11 @@ auto BlockAllocator::deallocate(block_id_t block_id) -> ChfsNullResult {
   usize bit_id = block_id % (bm->block_size() * 8);
   bool flag = bitmap.check(bit_id);
   if(!flag) {
-    return ChfsNullResult(ErrorType::INVALID_ARG);
+    return ErrorType::INVALID_ARG;
   }
   bitmap.clear(bit_id);
-  bm->write_block(id, buffer.data());
-  return KNullOk;
+  auto res = bm->write_block(id, buffer.data());
+  return res.is_ok() ? KNullOk : res.unwrap_error();
 }
 
 auto BlockAllocator::check_valid(block_id_t block_id) -> bool {

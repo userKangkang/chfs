@@ -32,7 +32,7 @@ auto CommitLog::append_log(txn_id_t txn_id,
     -> void {
   // TODO: Implement this function.
   for(auto op: ops) {
-    bm_->append_redo_log(txn_id, op->block_id_, op->new_block_state_);
+    bm_->append_redo_log(txn_id, op->block_id_, op->new_block_state_.data());
   }
 }
 

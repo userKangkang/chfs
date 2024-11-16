@@ -240,6 +240,7 @@ private:
 
   // Log related
   [[maybe_unused]] std::shared_ptr<chfs::CommitLog> commit_log;
+  [[maybe_unused]] std::shared_ptr<usize> global_txn;
   bool is_log_enabled_;
   bool may_failed_;
   [[maybe_unused]] bool is_checkpoint_enabled_;

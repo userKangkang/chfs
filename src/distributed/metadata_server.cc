@@ -36,10 +36,12 @@ inline auto MetadataServer::init_fs(const std::string &data_path) {
    */
   bool is_initialed = is_file_exist(data_path);
 
+
   auto block_manager = std::shared_ptr<BlockManager>(nullptr);
   if (is_log_enabled_) {
+    global_txn = std::make_shared<usize>(1);
     block_manager =
-        std::make_shared<BlockManager>(data_path, KDefaultBlockCnt, true);
+        std::make_shared<BlockManager>(data_path, KDefaultBlockCnt, true, global_txn);
   } else {
     block_manager = std::make_shared<BlockManager>(data_path, KDefaultBlockCnt);
   }
@@ -93,6 +95,7 @@ inline auto MetadataServer::init_fs(const std::string &data_path) {
       operation_->block_manager_->set_may_fail(true);
     commit_log = std::make_shared<CommitLog>(operation_->block_manager_,
                                              is_checkpoint_enabled_);
+    commit_log->recover();
   }
 
   bind_handlers();

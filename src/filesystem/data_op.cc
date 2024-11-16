@@ -117,15 +117,27 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
       //    You may use function `get_or_insert_indirect_block`
       //    in the case of indirect block.
       if(inode_p->is_direct_block(idx)) {
-        block_id_t bid = block_allocator_->allocate().unwrap();
+        auto bid_res = block_allocator_->allocate();
+        if(bid_res.is_err()) {
+          continue;
+        }
+        block_id_t bid = bid_res.unwrap();
         inode_p->set_block_direct(idx, bid);
       }
       else {
-        block_id_t bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
+        auto bid_res = inode_p->get_or_insert_indirect_block(block_allocator_);
+        if(bid_res.is_err()) {
+          continue;
+        }
+        block_id_t bid = bid_res.unwrap();
         auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
         block_manager_->read_block(bid, indirect_block.data());
         for(; idx < new_block_num; idx++) {
-          block_id_t allo_bid = block_allocator_->allocate().unwrap();
+          auto alloc_bid_res = block_allocator_->allocate();
+          if(alloc_bid_res.is_err()) {
+            continue;
+          }
+          block_id_t allo_bid = alloc_bid_res.unwrap();
           indirect_inode_p[idx - inlined_blocks_num] = allo_bid;
           // std::cout << allo_bid << " ";
         }
@@ -146,7 +158,11 @@ auto FileOperation::write_file(inode_id_t id, const std::vector<u8> &content)
       } else {
 
         // TODO: Free the indirect extra block.
-        block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
+        auto indirect_bid_res = inode_p->get_or_insert_indirect_block(block_allocator_);
+        if(indirect_bid_res.is_err()) {
+          continue;
+        }
+        block_id_t indirect_bid = indirect_bid_res.unwrap();
         auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
         block_manager_->read_block(indirect_bid, indirect_block.data());
         for(; idx < old_block_num; ++idx) {
