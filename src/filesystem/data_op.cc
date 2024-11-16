@@ -261,7 +261,6 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   
   v.push(999); // inode.
   lock_opr(999);
-  std::cout << "lock block " << v.top() << std::endl;
 
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
@@ -269,12 +268,12 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
     // I know goto is bad, but we have no choice
     goto err_ret;
   }
-  std::cout << "line 271." << std::endl;
+
   v.push(inode_res.unwrap());
   lock_opr(inode_res.unwrap());
-  std::cout << "line 274." << std::endl;
+
   file_sz = inode_p->get_size();
-  std::cout << "line 276." << std::endl;
+
   content.reserve(file_sz);
 
   // Now read the file
@@ -288,19 +287,16 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
     if (inode_p->is_direct_block(read_sz / block_size)) {
       // TODO: Implement the case of direct block.
       bid = inode_p->blocks[read_sz / block_size];
-      std::cout << "line 290." << std::endl;
     } else {
       // TODO: Implement the case of indirect block.
       usize inode_block_num = inode_p->get_direct_block_num();
       block_id_t indirect_bid = inode_p->get_or_insert_indirect_block(block_allocator_).unwrap();
       auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
-      std::cout << "line 296." << std::endl;
       if(!indirect_read) {
         indirect_read = true;
         v.push(indirect_bid);
         lock_opr(indirect_bid);
       }
-      std::cout << "line 300." << std::endl;
       block_manager_->read_block(indirect_bid, indirect_block.data());
       bid = indirect_inode_p[read_sz / block_size - inode_block_num];
     }
@@ -308,10 +304,8 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
     // TODO: Read from current block and store to `content`.
     v.push(bid);
     lock_opr(bid);
-    std::cout << "line 310." << std::endl;
     block_manager_->read_block(bid, buffer.data());
     content.insert(content.end(), buffer.begin(), buffer.end());
-    std::cout << "line 313." << std::endl;
     read_sz += sz;
   }
   content.resize(read_sz);

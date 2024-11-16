@@ -32,6 +32,10 @@ class BlockManager {
 protected:
   const usize block_sz = 4096;
 
+  const usize redo_log_block_num = 1024;
+  const usize redo_metadata_num_per_block = 256; // txn_id | block_id / -1 (commit flag)
+  const usize redo_metadata_block_num = 4;
+
   std::string file_name_;
   int fd;
   u8 *block_data;
@@ -39,6 +43,11 @@ protected:
   bool in_memory; // whether we use in-memory to emulate the block manager
   bool maybe_failed;
   usize write_fail_cnt;
+
+  // for redo-log.
+  usize log_start_block{0};
+  std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
+  usize log_metadata_block{0};
 
 public:
   /**
@@ -142,6 +151,20 @@ public:
   auto set_may_fail(bool may_fail) -> void {
     this->maybe_failed = may_fail;
   }
+
+  /**
+   * Append redo-log.
+   * 
+   * @param txn_id: transaction id of the modification of block.
+   * @param block_id: id of modified block.
+   * @param vector: modified data of the block.
+   */
+  auto append_redo_log(txn_id_t txn_id, block_id_t block_id, std::vector<u8> &vector) -> void;
+
+  /**
+   * Recover data by redo-log.
+   */
+  auto recover() -> void;
 };
 
 /**

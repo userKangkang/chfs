@@ -142,15 +142,12 @@ auto FileOperation::lookup(inode_id_t id, const char *name)
   if(is_exist) {
     while(!file_blocks.empty()) {
       unlock_opr(file_blocks.top());
-      std::cout << "block " << file_blocks.top() << " unlock." << std::endl;
       file_blocks.pop();
     }
     return ChfsResult<inode_id_t>(iter->id);
   }
-  std::cout << "file blocks size: " << file_blocks.size() << std::endl;
   while(!file_blocks.empty()) {
     unlock_opr(file_blocks.top());
-    std::cout << "block " << file_blocks.top() << " unlock." << std::endl;
     file_blocks.pop();
   }
 
@@ -169,14 +166,12 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   std::stack<block_id_t> file_blocks;
 
   std::vector<u8> src = read_file(id, file_blocks).unwrap();
-  std::cout << "line 166" << std::endl;
   std::string dir_string(src.begin(), src.end());
   parse_directory(dir_string, list);
   bool is_exist = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
     return entry.name.compare(name) == 0;
   }) != list.end();
   if(is_exist) {
-    std::cout << "line 173" << std::endl;
     while(!file_blocks.empty()) {
       unlock_opr(file_blocks.top());
       file_blocks.pop();
@@ -186,10 +181,8 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
   lock_opr(1000); // 1000 for bitmaps.
   block_id_t alloc_bid = block_allocator_->allocate().unwrap();
-  std::cout << "line 177" << std::endl;
   emplace_opr(alloc_bid);
   block_id_t new_id = inode_manager_->allocate_inode(type, alloc_bid).unwrap();
-  std::cout << "line 180" << std::endl;
   list.push_back({name, new_id});
   dir_string = dir_list_to_string(list);
   std::fill(src.begin(), src.end(), '\0');
@@ -200,7 +193,6 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
     unlock_opr(file_blocks.top());
     file_blocks.pop();
   }
-  std::cout << "line 203" << std::endl;
   return ChfsResult<inode_id_t>(static_cast<inode_id_t>(new_id));
 }
 

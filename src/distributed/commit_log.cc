@@ -31,7 +31,9 @@ auto CommitLog::append_log(txn_id_t txn_id,
                            std::vector<std::shared_ptr<BlockOperation>> ops)
     -> void {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  for(auto op: ops) {
+    bm_->append_redo_log(txn_id, op->block_id_, op->new_block_state_);
+  }
 }
 
 // {Your code here}
@@ -49,6 +51,6 @@ auto CommitLog::checkpoint() -> void {
 // {Your code here}
 auto CommitLog::recover() -> void {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  bm_->recover();
 }
 }; // namespace chfs

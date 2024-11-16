@@ -80,8 +80,31 @@ BlockManager::BlockManager(const std::string &file, usize block_cnt, bool is_log
     : file_name_(file), block_cnt(block_cnt), in_memory(false) {
   this->write_fail_cnt = 0;
   this->maybe_failed = false;
+  this->fd = open(file.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
   // TODO: Implement this function.
-  UNIMPLEMENTED();    
+  CHFS_ASSERT(this->fd != -1, "Failed to open the block manager file");
+
+  auto file_sz = get_file_sz(this->file_name_);
+  // reserve for logging.
+
+  if(is_log_enabled) {
+    log_metadata_block = this->block_cnt;
+    log_start_block = this->block_cnt + redo_metadata_block_num;
+    this->block_cnt += redo_log_block_num + redo_metadata_block_num;
+  }
+  if (file_sz == 0) {
+    initialize_file(this->fd, this->total_storage_sz());
+  } else {
+    this->block_cnt = file_sz / this->block_sz;
+    CHFS_ASSERT(this->total_storage_sz() == KDefaultBlockCnt * this->block_sz,
+                "The file size mismatches");
+  }
+
+  this->block_data =
+      static_cast<u8 *>(mmap(nullptr, this->total_storage_sz(),
+                             PROT_READ | PROT_WRITE, MAP_SHARED, this->fd, 0));
+  CHFS_ASSERT(this->block_data != MAP_FAILED, "Failed to mmap the data");
+  
 }
 
 auto BlockManager::write_block(block_id_t block_id, const u8 *data)
@@ -152,6 +175,30 @@ auto BlockManager::flush() -> ChfsNullResult {
   if (res != 0)
     return ChfsNullResult(ErrorType::INVALID);
   return KNullOk;
+}
+
+auto BlockManager::append_redo_log(txn_id_t txn_id, block_id_t block_id, std::vector<u8> &vector) -> void {
+  usize log_block_index = log_block_txns.size() + this->log_start_block;
+  usize log_metadata_index = log_block_txns.size() / redo_metadata_num_per_block + this->log_metadata_block;
+  usize log_metadata_offset = log_block_txns.size() % redo_metadata_num_per_block;
+  // write data to blocks
+  log_block_txns.push_back({txn_id, block_id});
+  write_block(log_block_index, vector.data());
+  sync(log_block_index);
+  // write metadata to blocks.
+  u8 metadata[16];
+  (*(u64*)metadata) = txn_id;
+  (*(u64*)(metadata + sizeof(u64))) = block_id;
+  write_partial_block(log_metadata_index, metadata, log_metadata_offset, 2 * sizeof(u64));
+  sync(log_metadata_index);
+}
+
+auto BlockManager::recover() -> void {
+  std::vector<u8> v(block_sz);
+  for(usize i = 0; i < log_block_txns.size(); i++) {
+    read_block(log_start_block + i, v.data());
+    write_block(log_block_txns[i].second, v.data());
+  }
 }
 
 BlockManager::~BlockManager() {
