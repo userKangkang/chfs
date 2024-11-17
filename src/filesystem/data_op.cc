@@ -275,8 +275,8 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   // indirect read?
   bool indirect_read = false;
   
-  v.push(999); // inode.
-  lock_opr(999);
+  v.push(-1); // inode.
+  lock_opr(-1);
 
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
