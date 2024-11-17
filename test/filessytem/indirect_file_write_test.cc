@@ -61,9 +61,9 @@ TEST(FileSystemTest, WriteLargeFile) {
       auto res = fs.write_file(id, contents[id]);
       ASSERT_TRUE(res.is_ok());
     }
-
+    std::stack<chfs::block_id_t> s;
     for (auto id : id_list) {
-      auto res = fs.read_file(id);
+      auto res = fs.read_file(id, s);
       ASSERT_TRUE(res.is_ok());
       auto res_data = res.unwrap();
       auto check = vec_equal(res_data, contents[id]);

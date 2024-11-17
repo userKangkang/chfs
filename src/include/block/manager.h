@@ -187,6 +187,13 @@ public:
     }
     return false;
   }
+
+  /**
+   * Get log entry size.
+   */
+  auto get_log_entry_size() -> usize {
+    return log_block_txns.size();
+  }
 };
 
 /**

@@ -22,8 +22,7 @@ CommitLog::~CommitLog() {}
 // {Your code here}
 auto CommitLog::get_log_entry_num() -> usize {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-  return 0;
+  return bm_->get_log_entry_size();
 }
 
 // {Your code here}

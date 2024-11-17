@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <mutex>
 #include <map>
+#include <unordered_map>
 #include <stack>
 
 namespace chfs {
