@@ -4,7 +4,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <algorithm>
 #include "block/manager.h"
 
 namespace chfs {
@@ -196,11 +196,11 @@ auto BlockManager::append_redo_log(txn_id_t txn_id, block_id_t block_id, const u
   this->maybe_failed = false;
   
 
-  usize log_block_index = log_block_txns.size() + this->log_start_block;
-  usize log_metadata_index = log_block_txns.size() / redo_metadata_num_per_block + this->log_metadata_block;
-  usize log_metadata_offset = log_block_txns.size() % redo_metadata_num_per_block;
+  usize log_block_index = log_txn_blocks.size() + this->log_start_block;
+  usize log_metadata_index = log_txn_blocks.size() / redo_metadata_num_per_block + this->log_metadata_block;
+  usize log_metadata_offset = log_txn_blocks.size() % redo_metadata_num_per_block;
   // write data to blocks
-  log_block_txns.push_back({txn_id, block_id});
+  log_txn_blocks.push_back({txn_id, block_id});
   write_block(log_block_index, vector);
   sync(log_block_index);
   // write metadata to blocks.
@@ -209,6 +209,83 @@ auto BlockManager::append_redo_log(txn_id_t txn_id, block_id_t block_id, const u
   (*(u64*)(metadata + sizeof(u64))) = block_id;
   write_partial_block(log_metadata_index, metadata, log_metadata_offset, 2 * sizeof(u64));
   sync(log_metadata_index);
+
+  this->write_fail_cnt = origin_fail_cnt;
+  this->maybe_failed = true;
+}
+
+auto BlockManager::commit_log(txn_id_t txn_id) -> void {
+  auto origin_fail_cnt = this->write_fail_cnt;
+  this->maybe_failed = false;
+
+  usize log_metadata_index = log_txn_blocks.size() / redo_metadata_num_per_block + this->log_metadata_block;
+  usize log_metadata_offset = log_txn_blocks.size() % redo_metadata_num_per_block;
+
+  u8 metadata[16];
+  (*(u64*)metadata) = txn_id;
+  (*(u64*)(metadata + sizeof(u64))) = (u64)(-1);
+  log_txn_blocks.push_back({txn_id, (u64)-1});
+  write_partial_block(log_metadata_index, metadata, log_metadata_offset, 2 * sizeof(u64));
+  sync(log_metadata_index);
+
+  this->write_fail_cnt = origin_fail_cnt;
+  this->maybe_failed = true;
+}
+
+auto BlockManager::checkpoint() -> void {
+  auto origin_fail_cnt = this->write_fail_cnt;
+  this->maybe_failed = false;
+  // get all the finished txns.
+  std::vector<txn_id_t> finished_txn;
+  for(auto txn_block: log_txn_blocks) {
+    if(txn_block.second == (u64)-1) {
+      finished_txn.push_back(txn_block.first);
+    }
+  }
+  // persist all the finished txns.
+  for(int i = 0; i < log_txn_blocks.size(); i++) {
+    auto txn_block = log_txn_blocks[i];
+    if(std::find(finished_txn.begin(), finished_txn.end(), txn_block.first) != finished_txn.end()) {
+      if(txn_block.second != (u64)-1) {
+        u8 tmp[block_sz];
+        read_block(log_start_block + i, tmp);
+        write_block(txn_block.second, tmp);
+        sync(txn_block.second);
+        zero_block(log_start_block + i);
+      }
+    }
+  }
+  // move the existing log blocks.
+  int write_index = 0;
+  for(int i = 0; i < log_txn_blocks.size(); i++) {
+    auto txn_block = log_txn_blocks[i];
+    if(std::find(finished_txn.begin(), finished_txn.end(), txn_block.first) == finished_txn.end()) {
+      u8 tmp[block_sz];
+      read_block(log_start_block + i, tmp);
+      write_block(log_start_block + write_index, tmp);
+      sync(log_start_block + write_index);
+      zero_block(log_start_block + i);
+      write_index += 1;
+    }
+  }
+  // discard the commited logs
+  for(int i = 0; i < 4; i++) {
+    zero_block(log_metadata_block + i);
+  }
+  std::remove_if(log_txn_blocks.begin(), log_txn_blocks.end(), 
+    [finished_txn](auto txn_block) -> bool {
+      return std::find(finished_txn.begin(), finished_txn.end(), txn_block.first) != finished_txn.end();
+  });
+  for(int i = 0; i < log_txn_blocks.size(); i++) {
+    usize log_metadata_index = i / redo_metadata_num_per_block + this->log_metadata_block;
+    usize log_metadata_offset = i % redo_metadata_num_per_block;
+
+    u8 metadata[16];
+    (*(u64*)metadata) = log_txn_blocks[i].first;
+    (*(u64*)(metadata + sizeof(u64))) = log_txn_blocks[i].second;
+    write_partial_block(log_metadata_index, metadata, log_metadata_offset, 2 * sizeof(u64));
+    sync(log_metadata_index);
+  }
 
   this->write_fail_cnt = origin_fail_cnt;
   this->maybe_failed = true;
@@ -233,20 +310,20 @@ auto BlockManager::recover() -> void {
         zero_block(this->log_metadata_block + current_lm_index);
         break;
       }
-      log_block_txns.push_back({txn_number, block_id});
+      log_txn_blocks.push_back({txn_number, block_id});
     }
     zero_block(this->log_metadata_block + current_lm_index);
     current_lm_index++;
   }
 
   std::vector<u8> v(block_sz);
-  for(usize i = 0; i < log_block_txns.size(); i++) {
+  for(usize i = 0; i < log_txn_blocks.size(); i++) {
     read_block(log_start_block + i, v.data());
-    write_block(log_block_txns[i].second, v.data());
-    sync(log_block_txns[i].second);
+    write_block(log_txn_blocks[i].second, v.data());
+    sync(log_txn_blocks[i].second);
   }
 
-  log_block_txns.clear();
+  log_txn_blocks.clear();
 
   this->write_fail_cnt = origin_fail_cnt;
   if(origin_failed) {

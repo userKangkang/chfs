@@ -229,6 +229,16 @@ private:
    */
   inline auto init_fs(const std::string &data_path);
 
+  /**
+   * atomic log commit and txn addition.
+   */
+  auto atomic_commit() -> void {
+    commit_lock.lock();
+    commit_log->commit_log(*global_txn);
+    (*global_txn) += 1;
+    commit_lock.unlock();
+  }
+
   std::unique_ptr<RpcServer> server_; // Receiving requests from the client
   std::shared_ptr<FileOperation> operation_; // Real metadata handler
   std::map<mac_id_t, std::shared_ptr<RpcClient>>
@@ -252,6 +262,7 @@ private:
   // All bitmap blocks mapped to block_id 1,
   // Others mapped to their own id.
   std::shared_ptr<std::map<block_id_t, std::mutex>> two_phase_locks;
+  std::mutex commit_lock;
 };
 
 } // namespace chfs

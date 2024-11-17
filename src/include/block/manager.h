@@ -46,7 +46,7 @@ protected:
 
   // for redo-log.
   [[maybe_unused]] usize log_start_block{0};
-  [[maybe_unused]] std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
+  [[maybe_unused]] std::vector<std::pair<txn_id_t, block_id_t>> log_txn_blocks;
   [[maybe_unused]] usize log_metadata_block{0};
   [[maybe_unused]] std::shared_ptr<usize> global_txn_number_;
   [[maybe_unused]] bool is_write_fail_per_txn{false};
@@ -192,8 +192,19 @@ public:
    * Get log entry size.
    */
   auto get_log_entry_size() -> usize {
-    return log_block_txns.size();
+    return log_txn_blocks.size();
   }
+
+  /**
+   * Marks a txn as finished.
+   */
+  auto commit_log(txn_id_t txn_id) -> void;
+
+  /**
+   * Write all the finished txns' modifications to the disk,
+   * and discard their logs.
+   */
+  auto checkpoint() -> void;
 };
 
 /**

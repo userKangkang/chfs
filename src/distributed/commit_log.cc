@@ -38,13 +38,13 @@ auto CommitLog::append_log(txn_id_t txn_id,
 // {Your code here}
 auto CommitLog::commit_log(txn_id_t txn_id) -> void {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  bm_->commit_log(txn_id);
 }
 
 // {Your code here}
 auto CommitLog::checkpoint() -> void {
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  bm_->checkpoint();
 }
 
 // {Your code here}

@@ -153,8 +153,8 @@ auto MetadataServer::mknode(u8 type, inode_id_t parent, const std::string &name)
     }
     inode_id = res.unwrap();
   }
-  // inode is metadata, not need to store in data_server. 
-  
+  // inode is metadata, not need to store in data_server.
+  // atomic_commit();
   return inode_id;
 }
 
@@ -164,7 +164,7 @@ auto MetadataServer::unlink(inode_id_t parent, const std::string &name)
   // TODO: Implement this function.
   auto res = operation_->unlink(parent, name.data()).is_ok();
   // if not ok, this is a directory... then?
-
+  // atomic_commit();
   return res;
 }
 
@@ -173,7 +173,7 @@ auto MetadataServer::lookup(inode_id_t parent, const std::string &name)
     -> inode_id_t {
   // TODO: Implement this function.
   auto res = operation_->lookup(parent, name.data());
-
+  // atomic_commit();
   return res.is_ok() ? res.unwrap() : 0;
 }
 
@@ -197,6 +197,8 @@ auto MetadataServer::get_block_map(inode_id_t id) -> std::vector<BlockInfo> {
   }
   (*two_phase_locks)[metadata_bid].unlock();
   (*two_phase_locks)[999].unlock();
+
+  // atomic_commit();
   return res;
 }
 
@@ -225,6 +227,8 @@ auto MetadataServer::allocate_block(inode_id_t id) -> BlockInfo {
   (*two_phase_locks)[metadata_bid].unlock();
   (*two_phase_locks)[999].unlock();
   (*two_phase_locks)[1001].unlock();
+
+  // atomic_commit();
   return {pair.first, randomed_mac_id, pair.second};
 }
 
@@ -255,6 +259,8 @@ auto MetadataServer::free_block(inode_id_t id, block_id_t block_id,
   (*two_phase_locks)[metadata_bid].unlock();
   (*two_phase_locks)[999].unlock();
   (*two_phase_locks)[1002].unlock();
+  
+  // atomic_commit();
   return metadata_res;
 }
 
