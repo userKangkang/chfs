@@ -329,7 +329,7 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   return ChfsResult<std::vector<u8>>(std::move(content));
 
 err_ret:
-  return ChfsResult<std::vector<u8>>(error_code);
+  return error_code;
 }
 
 auto FileOperation::read_file_w_off(inode_id_t id, u64 sz, u64 offset)

@@ -49,6 +49,7 @@ protected:
   [[maybe_unused]] std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
   [[maybe_unused]] usize log_metadata_block{0};
   [[maybe_unused]] std::shared_ptr<usize> global_txn_number_;
+  [[maybe_unused]] bool is_write_fail_per_txn{false};
 
 public:
   /**
@@ -171,6 +172,21 @@ public:
    * Recover data by redo-log.
    */
   auto recover() -> void;
+
+  /**
+   * Return whether the write error occurs in single tnx,
+   * and then set it false.
+   */
+  auto is_write_fail_txn() -> bool {
+    if(!maybe_failed) {
+      return false;
+    }
+    if(is_write_fail_per_txn) {
+      is_write_fail_per_txn = false;
+      return true;
+    }
+    return false;
+  }
 };
 
 /**

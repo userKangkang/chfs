@@ -125,9 +125,9 @@ auto BlockAllocator::allocate() -> ChfsResult<block_id_t> {
       // 2. Flush the changed bitmap block back to the block manager.
       // 3. Calculate the value of `retval`.
       bitmap.set(res.value());
-      auto write_res = bm->write_block(i + this->bitmap_block_id, buffer.data());
+      bm->write_block(i + this->bitmap_block_id, buffer.data());
       retval = static_cast<block_id_t>(res.value() + i * bm->block_size() * 8);
-      return write_res.is_ok() ?  ChfsResult<block_id_t>(retval) : write_res.unwrap_error();
+      return ChfsResult<block_id_t>(retval);
     }
   }
   return ErrorType::OUT_OF_RESOURCE;

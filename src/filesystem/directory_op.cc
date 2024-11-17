@@ -164,8 +164,11 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   // 2. Create the new inode.
   // 3. Append the new entry to the parent directory.
   std::stack<block_id_t> file_blocks;
-
-  std::vector<u8> src = read_file(id, file_blocks).unwrap();
+  auto src_res = read_file(id, file_blocks);
+  if(src_res.is_err()) {
+    return ErrorType::NotExist;
+  }
+  std::vector<u8> src = src_res.unwrap();
   std::string dir_string(src.begin(), src.end());
   parse_directory(dir_string, list);
   bool is_exist = std::find_if(list.begin(), list.end(), [name](DirectoryEntry entry) {
@@ -181,23 +184,11 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   // `allocate` bind to bitmap lock, and 2PL will emplace allocated block.
   lock_opr(1000); // 1000 for bitmaps.
   auto alloc_bid_res = block_allocator_->allocate();
-  if(alloc_bid_res.is_err()) {
-    unlock_opr(1000);
-    while(!file_blocks.empty()) {
-      unlock_opr(file_blocks.top());
-      file_blocks.pop();
-    }
-  }
+
   block_id_t alloc_bid = alloc_bid_res.unwrap();
   emplace_opr(alloc_bid);
   auto new_id_res = inode_manager_->allocate_inode(type, alloc_bid);
-  if(new_id_res.is_err()) {
-    unlock_opr(1000);
-    while(!file_blocks.empty()) {
-      unlock_opr(file_blocks.top());
-      file_blocks.pop();
-    }
-  }
+
   block_id_t new_id = new_id_res.unwrap();
   list.push_back({name, new_id});
   dir_string = dir_list_to_string(list);
@@ -208,6 +199,9 @@ auto FileOperation::mk_helper(inode_id_t id, const char *name, InodeType type)
   while(!file_blocks.empty()) {
     unlock_opr(file_blocks.top());
     file_blocks.pop();
+  }
+  if(block_allocator_->bm->is_write_fail_txn()) {
+    return ErrorType::BadResponse;
   }
   return ChfsResult<inode_id_t>(static_cast<inode_id_t>(new_id));
 }
@@ -247,6 +241,10 @@ auto FileOperation::unlink(inode_id_t parent, const char *name)
   while(!file_blocks.empty()) {
     unlock_opr(file_blocks.top());
     file_blocks.pop();
+  }
+
+  if(block_allocator_->bm->is_write_fail_txn()) {
+    return ErrorType::BadResponse;
   }
   
   return KNullOk;

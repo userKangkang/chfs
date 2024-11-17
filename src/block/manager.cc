@@ -115,6 +115,7 @@ auto BlockManager::write_block(block_id_t block_id, const u8 *data)
     append_redo_log(*global_txn_number_, block_id, data);
     this->write_fail_cnt++;
     if (this->write_fail_cnt >= 3) {
+      is_write_fail_per_txn = true;
       this->write_fail_cnt = 0;
       return ErrorType::INVALID;
     }
@@ -142,6 +143,7 @@ auto BlockManager::write_partial_block(block_id_t block_id, const u8 *data,
     this->write_fail_cnt++;
     if (this->write_fail_cnt >= 3) {
       this->write_fail_cnt = 0;
+      is_write_fail_per_txn = true;
       return ErrorType::INVALID;
     }
   }
@@ -193,7 +195,6 @@ auto BlockManager::append_redo_log(txn_id_t txn_id, block_id_t block_id, const u
   auto origin_fail_cnt = this->write_fail_cnt;
   this->maybe_failed = false;
   
-  std::cout << "append log line 196" << std::endl;
 
   usize log_block_index = log_block_txns.size() + this->log_start_block;
   usize log_metadata_index = log_block_txns.size() / redo_metadata_num_per_block + this->log_metadata_block;

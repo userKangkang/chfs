@@ -143,13 +143,13 @@ auto MetadataServer::mknode(u8 type, inode_id_t parent, const std::string &name)
     // regular file inode must get changed in metadata server.
     auto res = operation_->mkfile(parent, name.data());
     if(res.is_err()) {
-      return false;
+      return 0;
     }
     inode_id = res.unwrap();
   } else {
     auto res = operation_->mkdir(parent, name.data());
     if(res.is_err()) {
-      return false;
+      return 0;
     }
     inode_id = res.unwrap();
   }

@@ -103,12 +103,8 @@ auto InodeManager::allocate_inode(InodeType type, block_id_t bid)
       Inode inode = Inode(type, bm->block_size());
       u8 buffer[sizeof(Inode)];
       *(Inode*)buffer = inode;
-      auto write_res = bm->write_partial_block(bid, buffer, 0, sizeof(Inode));
-      if(write_res.is_err()) {
-        return write_res.unwrap_error();
-      }
+      bm->write_partial_block(bid, buffer, 0, sizeof(Inode));
       set_table(free_idx.value(), bid);
-      
       return ChfsResult<inode_id_t>(RAW_2_LOGIC(free_idx.value()));
     }
   }
