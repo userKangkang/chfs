@@ -3,6 +3,8 @@
 
 namespace chfs {
 
+std::stack<block_id_t> FileOperation::not_to_lock;
+
 FileOperation::FileOperation(std::shared_ptr<BlockManager> bm,
                              u64 max_inode_supported)
     : block_manager_(bm), inode_manager_(std::shared_ptr<InodeManager>(
@@ -55,6 +57,8 @@ auto FileOperation::remove_file(inode_id_t id, std::stack<block_id_t> &s) -> Chf
 
   std::vector<block_id_t> free_set;
 
+  bool to_lock = (&s != &not_to_lock);
+
   auto inode_p = reinterpret_cast<Inode *>(inode.data());
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
@@ -62,8 +66,12 @@ auto FileOperation::remove_file(inode_id_t id, std::stack<block_id_t> &s) -> Chf
     // I know goto is bad, but we have no choice
     goto err_ret;
   }
-  s.push(inode_res.unwrap());
-  lock_opr(inode_res.unwrap());
+
+  if(to_lock) {
+    s.push(inode_res.unwrap());
+    lock_opr(inode_res.unwrap());
+  }
+  
 
   for (uint i = 0; i < inode_p->get_direct_block_num(); ++i) {
     if (inode_p->blocks[i] == KInvalidBlockID) {
@@ -75,9 +83,11 @@ auto FileOperation::remove_file(inode_id_t id, std::stack<block_id_t> &s) -> Chf
   if (inode_p->blocks[inode_p->get_direct_block_num()] != KInvalidBlockID) {
     // we still need to release the indirect block
     std::vector<u8> indirect_block;
-
-    s.push(inode_p->blocks[inode_p->get_direct_block_num()]);
-    lock_opr(inode_p->blocks[inode_p->get_direct_block_num()]);
+    if(to_lock) {
+      s.push(inode_p->blocks[inode_p->get_direct_block_num()]);
+      lock_opr(inode_p->blocks[inode_p->get_direct_block_num()]);
+    }
+    
 
     auto read_res = this->block_manager_->read_block(
         inode_p->blocks[inode_p->get_direct_block_num()],
@@ -110,7 +120,7 @@ auto FileOperation::remove_file(inode_id_t id, std::stack<block_id_t> &s) -> Chf
 
   // now free the blocks
   for (auto bid : free_set) {
-    if(bid != inode_res.unwrap() && bid != inode_p->blocks[inode_p->get_direct_block_num()]) {
+    if(to_lock && (bid != inode_res.unwrap() && bid != inode_p->blocks[inode_p->get_direct_block_num()])) {
       s.push(bid);
       lock_opr(bid);
     }

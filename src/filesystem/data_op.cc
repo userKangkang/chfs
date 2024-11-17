@@ -42,7 +42,7 @@ auto FileOperation::write_file_w_off(inode_id_t id, const char *data, u64 sz,
                                      u64 offset) -> ChfsResult<u64> {
   std::stack<block_id_t> s;
   
-  auto read_res = this->read_file(id, s);
+  auto read_res = this->read_file(id);
 
   while(!s.empty()) {
     unlock_opr(s.top());
@@ -261,6 +261,8 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   auto error_code = ErrorType::DONE;
   std::vector<u8> content;
 
+  bool to_lock = (&v != &not_to_lock);
+
   const auto block_size = this->block_manager_->block_size();
 
   // 1. read the inode
@@ -275,8 +277,10 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
   // indirect read?
   bool indirect_read = false;
   
-  v.push(-1); // inode.
-  lock_opr(-1);
+  if(to_lock) {
+    v.push(-1); // inode.
+    lock_opr(-1);
+  }
 
   auto inode_res = this->inode_manager_->read_inode(id, inode);
   if (inode_res.is_err()) {
@@ -284,9 +288,10 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
     // I know goto is bad, but we have no choice
     goto err_ret;
   }
-
-  v.push(inode_res.unwrap());
-  lock_opr(inode_res.unwrap());
+  if(to_lock) {
+    v.push(inode_res.unwrap());
+    lock_opr(inode_res.unwrap());
+  }
 
   file_sz = inode_p->get_size();
 
@@ -310,16 +315,20 @@ auto FileOperation::read_file(inode_id_t id, std::stack<block_id_t> &v) -> ChfsR
       auto indirect_inode_p = reinterpret_cast<block_id_t*>(indirect_block.data());
       if(!indirect_read) {
         indirect_read = true;
-        v.push(indirect_bid);
-        lock_opr(indirect_bid);
+        if(to_lock) {
+          v.push(indirect_bid);
+          lock_opr(indirect_bid);
+        }
       }
       block_manager_->read_block(indirect_bid, indirect_block.data());
       bid = indirect_inode_p[read_sz / block_size - inode_block_num];
     }
 
     // TODO: Read from current block and store to `content`.
-    v.push(bid);
-    lock_opr(bid);
+    if(to_lock) {
+      v.push(bid);
+      lock_opr(bid);
+    }
     block_manager_->read_block(bid, buffer.data());
     content.insert(content.end(), buffer.begin(), buffer.end());
     read_sz += sz;
@@ -336,7 +345,7 @@ auto FileOperation::read_file_w_off(inode_id_t id, u64 sz, u64 offset)
     -> ChfsResult<std::vector<u8>> {
   std::stack<block_id_t> s;
 
-  auto res = read_file(id, s);
+  auto res = read_file(id);
   
   while(!s.empty()) {
     unlock_opr(s.top());
@@ -362,7 +371,7 @@ auto FileOperation::resize(inode_id_t id, u64 sz) -> ChfsResult<FileAttr> {
 
   std::stack<block_id_t> s;
 
-  auto file_content = this->read_file(id, s);
+  auto file_content = this->read_file(id);
 
   while(!s.empty()) {
     unlock_opr(s.top());

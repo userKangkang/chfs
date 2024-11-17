@@ -37,7 +37,10 @@ protected:
     two_phase_locks_ = m_2PL;
   }
 
+
 public:
+
+  static std::stack<block_id_t> not_to_lock; 
   /**
    * Initialize a filesystem from scratch
    * @param bm the block manager to manage the block device
@@ -119,7 +122,7 @@ public:
    *
    * @param id the id of the inode
    */
-  auto read_file(inode_id_t, std::stack<block_id_t>& v) -> ChfsResult<std::vector<u8>>;
+  auto read_file(inode_id_t, std::stack<block_id_t>& s = not_to_lock) -> ChfsResult<std::vector<u8>>;
 
   /**
    * Read the content to the blocks pointed by the inode
@@ -137,7 +140,7 @@ public:
    * @param id the id of the inode
    * @return whether the remove is ok
    */
-  auto remove_file(inode_id_t, std::stack<block_id_t> &) -> ChfsNullResult;
+  auto remove_file(inode_id_t, std::stack<block_id_t> &s = not_to_lock) -> ChfsNullResult;
 
   /**
    * Get the free blocks of the filesystem.

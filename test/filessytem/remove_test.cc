@@ -45,10 +45,9 @@ TEST(FileSystemTest, Remove) {
   }
   auto free_block_cnt_after_1 = fs.get_free_blocks_num().unwrap();
   ASSERT_LE(free_block_cnt_after_1, free_block_cnt);
-  std::stack<chfs::block_id_t> s;
   // The real test remove here
   for (auto id : id_list) {
-    auto res = fs.remove_file(id, s);
+    auto res = fs.remove_file(id);
     ASSERT_TRUE(res.is_ok());
 
     // After remove, the getattr should never be ok
