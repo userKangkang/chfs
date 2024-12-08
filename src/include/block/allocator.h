@@ -95,6 +95,15 @@ public:
    *         other error code if there is other error.
    */
   auto deallocate(block_id_t block_id) -> ChfsNullResult;
+
+  /**
+   * Check the validaty of the block id.
+   * @param block_id the block id to be checked.
+   * 
+   * @return false if the block is freed,
+   *         true if the block is allocated.
+   */
+  auto check_valid(block_id_t block_id) -> bool;
 };
 
 } // namespace chfs

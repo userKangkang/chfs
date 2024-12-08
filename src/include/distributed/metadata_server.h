@@ -18,6 +18,8 @@
 #include "metadata/manager.h"
 #include "filesystem/operations.h"
 #include "distributed/commit_log.h"
+#include <mutex>
+#include <map>
 
 namespace chfs {
 
@@ -238,6 +240,7 @@ private:
 
   // Log related
   [[maybe_unused]] std::shared_ptr<chfs::CommitLog> commit_log;
+  [[maybe_unused]] std::shared_ptr<usize> global_txn;
   bool is_log_enabled_;
   bool may_failed_;
   [[maybe_unused]] bool is_checkpoint_enabled_;
@@ -245,6 +248,10 @@ private:
   /**
    * {You can add anything you want here}
    */
+  // All inode blocks mapped to block_id 0,
+  // All bitmap blocks mapped to block_id 1,
+  // Others mapped to their own id.
+  std::shared_ptr<std::map<block_id_t, std::mutex>> two_phase_locks;
 };
 
 } // namespace chfs

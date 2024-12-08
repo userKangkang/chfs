@@ -131,9 +131,10 @@ TEST_F(MetadataServerTest, CheckPersist) {
   // Then lookup the file and then read its content
   auto lookup_res = meta_srv->lookup(1, "fileA");
   EXPECT_EQ(lookup_res, 2);
-
+  std::cout << "line 134" << std::endl;
   // Show me the block map
   auto block_map = meta_srv->get_block_map(file_id);
+  std::cout << "line 136" << std::endl;
   EXPECT_EQ(block_map.size(), 1);
   auto [orig_block_id, orig_mac_id, orig_version] = block_map[0];
   EXPECT_EQ(orig_mac_id, machine_id);

@@ -1,0 +1,3 @@
+Start to hook fuse
+fusermount: mounting over filesystem type 0x01021997 is forbidden
+Fuse mount fails. 

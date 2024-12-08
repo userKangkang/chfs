@@ -226,6 +226,50 @@ public:
   auto begin() -> InodeIterator;
   auto end() -> InodeIterator;
 
+  // functions set for lab2's metadata server.
+  // we suppose that the blocks with even index store block_id,
+  // while ones with odd index store <mac_id, version>
+
+  auto set_block_direct_metadata(block_id_t bid, mac_id_t mid, version_t version) {
+    usize idx = inner_attr.size / block_size * 2;
+    this->blocks[idx] = bid;
+    block_id_t tuple_data = mid;
+    tuple_data = (tuple_data << 32) | version;
+    this->blocks[idx + 1] = tuple_data;
+
+    inner_attr.size += block_size;
+  }
+
+  auto get_block_map_num_metadata() -> usize {
+    return inner_attr.size / block_size * 2;
+  }
+
+  auto get_tuple_metadata(usize idx) -> std::tuple<block_id_t, mac_id_t, version_t> {
+    return {blocks[idx], (u32)(blocks[idx + 1] >> 32), (u32)blocks[idx + 1]};
+  }
+
+  auto free_certain_block(block_id_t bid, mac_id_t mid) -> bool {
+    usize free_idx = -1;
+    usize map_num = get_block_map_num_metadata();
+    for(usize i = 0; i < map_num; i += 2) {
+      auto [block_id, mac_id, version] = get_tuple_metadata(i);
+      if(block_id == bid && mac_id == mid) {
+        free_idx = i;
+        break;
+      }
+    }
+    if(free_idx >= map_num) {
+      return false;
+    }
+    for(usize i = free_idx; i < map_num - 2; i += 2) {
+      memcpy(&(blocks[i]), &(blocks[i + 2]), 16);
+    }
+    inner_attr.size -= block_size;
+    memset(&(blocks[map_num - 2]), 0, 16);
+    return true;
+  }
+
+
 } __attribute__((packed));
 
 static_assert(sizeof(Inode) == sizeof(FileAttr) + sizeof(InodeType) +

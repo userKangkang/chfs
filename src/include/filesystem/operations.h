@@ -13,6 +13,10 @@
 
 #include "metadata/manager.h"
 #include <sys/stat.h>
+#include <mutex>
+#include <map>
+#include <unordered_map>
+#include <stack>
 
 namespace chfs {
 
@@ -27,8 +31,16 @@ protected:
   [[maybe_unused]] std::shared_ptr<BlockManager> block_manager_;
   [[maybe_unused]] std::shared_ptr<InodeManager> inode_manager_;
   [[maybe_unused]] std::shared_ptr<BlockAllocator> block_allocator_;
+  [[maybe_unused]] std::shared_ptr<std::map<block_id_t, std::mutex>> two_phase_locks_;
+
+  auto set_2PL(std::shared_ptr<std::map<block_id_t, std::mutex>> m_2PL) -> void {
+    two_phase_locks_ = m_2PL;
+  }
+
 
 public:
+
+  static std::stack<block_id_t> not_to_lock; 
   /**
    * Initialize a filesystem from scratch
    * @param bm the block manager to manage the block device
@@ -110,7 +122,7 @@ public:
    *
    * @param id the id of the inode
    */
-  auto read_file(inode_id_t) -> ChfsResult<std::vector<u8>>;
+  auto read_file(inode_id_t, std::stack<block_id_t>& s = not_to_lock) -> ChfsResult<std::vector<u8>>;
 
   /**
    * Read the content to the blocks pointed by the inode
@@ -128,7 +140,7 @@ public:
    * @param id the id of the inode
    * @return whether the remove is ok
    */
-  auto remove_file(inode_id_t) -> ChfsNullResult;
+  auto remove_file(inode_id_t, std::stack<block_id_t> &s = not_to_lock) -> ChfsNullResult;
 
   /**
    * Get the free blocks of the filesystem.
@@ -185,6 +197,29 @@ public:
    * @return  ENOTEMPTY if the deleted file is a directory
    */
   auto unlink(inode_id_t parent, const char *name) -> ChfsNullResult;
+
+  /**
+   * These functions work for 2PL.
+   */
+  auto lock_opr(block_id_t bid) -> void {
+    if(two_phase_locks_ != nullptr) {
+      (*two_phase_locks_)[bid].lock();
+    }
+  }
+
+  auto unlock_opr(block_id_t bid) -> void {
+    if(two_phase_locks_ != nullptr) {
+      (*two_phase_locks_)[bid].unlock();
+    }
+  }
+
+  auto emplace_opr(block_id_t bid) -> void {
+    if(two_phase_locks_ != nullptr) {
+      if(two_phase_locks_->find(bid) == two_phase_locks_->end()) {
+        (*two_phase_locks_)[bid];
+      }
+    }
+  }
 
 private:
   FileOperation(std::shared_ptr<BlockManager> bm,
