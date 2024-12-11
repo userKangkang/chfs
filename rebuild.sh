@@ -1,5 +1,5 @@
 rm -r build
 mkdir build
 cd build
-cmake ..
-make -j
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ..
+make build-tests -j
