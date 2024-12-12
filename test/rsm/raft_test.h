@@ -245,7 +245,6 @@ public:
         int temp_term;
         int temp_idx;
         std::tie(is_leader, temp_term, temp_idx) = ret2;
-
         if (is_leader) {
           log_idx = temp_idx;
           break;
@@ -259,6 +258,7 @@ public:
           if (committed_nodes >= expected_nodes) {
             /* The log is committed */
             int committed_value = GetCommittedValue(log_idx);
+            std::cout << "log: " << log_idx << " committed with value: " << committed_value << std::endl;
             if (committed_value == value) {
               return log_idx;
             }

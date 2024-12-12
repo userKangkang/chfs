@@ -80,7 +80,7 @@ struct RpcAppendEntriesArgs {
     int prevLogTerm;
     std::vector<int> entries_index;
     std::vector<int> entries_term;
-    std::vector<u8> entries_command;
+    std::vector<int> entries_command;
     int leaderCommit;
 
     MSGPACK_DEFINE(
@@ -95,9 +95,6 @@ struct RpcAppendEntriesArgs {
     )
 
     RpcAppendEntriesArgs() {}
-
-    RpcAppendEntriesArgs(int term, int leaderId, int prevLogIndex, int prevLogTerm, std::vector<int> entries_index, std::vector<int> entries_term, std::vector<u8> entries_command, int leaderCommit):
-        term(term), leaderId(leaderId), prevLogIndex(prevLogIndex), prevLogTerm(prevLogTerm), entries_index(entries_index), entries_term(entries_term), entries_command(entries_command), leaderCommit(leaderCommit) {}
 };
 
 template <typename Command>
@@ -107,7 +104,7 @@ RpcAppendEntriesArgs transform_append_entries_args(const AppendEntriesArgs<Comma
 
     std::vector<int> entries_index;
     std::vector<int> entries_term;
-    std::vector<u8> entries_command;
+    std::vector<int> entries_command;
 
     for (auto &&entry: arg.entries) {
         entries_index.push_back(entry.index);
@@ -115,16 +112,18 @@ RpcAppendEntriesArgs transform_append_entries_args(const AppendEntriesArgs<Comma
         entries_command.push_back(entry.command.value);
     }
 
-    return RpcAppendEntriesArgs(
-        arg.term,
-        arg.leaderId,
-        arg.prevLogIndex,
-        arg.prevLogTerm,
-        entries_index,
-        entries_term,
-        entries_command,
-        arg.leaderCommit
-    );
+    RpcAppendEntriesArgs rpc_arg;
+
+    rpc_arg.term = arg.term;
+    rpc_arg.leaderId = arg.leaderId;
+    rpc_arg.prevLogIndex = arg.prevLogIndex;
+    rpc_arg.prevLogTerm = arg.prevLogTerm;
+    rpc_arg.entries_index = entries_index;
+    rpc_arg.entries_term = entries_term;
+    rpc_arg.entries_command = entries_command;
+    rpc_arg.leaderCommit = arg.leaderCommit;
+
+    return rpc_arg;
 }
 
 template <typename Command>
