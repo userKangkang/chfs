@@ -258,7 +258,6 @@ public:
           if (committed_nodes >= expected_nodes) {
             /* The log is committed */
             int committed_value = GetCommittedValue(log_idx);
-            std::cout << "log: " << log_idx << " committed with value: " << committed_value << std::endl;
             if (committed_value == value) {
               return log_idx;
             }

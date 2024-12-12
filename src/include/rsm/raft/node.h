@@ -321,8 +321,10 @@ auto RaftNode<StateMachine, Command>::new_command(std::vector<u8> cmd_data,
     log_entry<Command> entry(current_term, log_idx, cmd);
     log_entries.push_back(entry);
 
-    match_idx[my_id] += 1;
+    match_idx[my_id] = log_entries.back().index;
     match_count[my_id] = true;
+
+    RAFT_LOG("new command, term %d, index %d", current_term, log_idx);
   }
   return std::make_tuple(flag, current_term, log_idx);
 }
@@ -356,7 +358,7 @@ void RaftNode<StateMachine, Command>::start_election() {
   get_random_timeout();
   // send request vote to all the nodes.
   for (auto &&client : rpc_clients_map) {
-    if (client.first != my_id) {
+    if (client.first != my_id && client.second != nullptr) {
       RequestVoteArgs arg(current_term, my_id, log_entries.back().index,
                           log_entries.back().term);
 
@@ -374,7 +376,7 @@ void RaftNode<StateMachine, Command>::send_heartbeat() {
   if (role == RaftRole::Leader) {
     // if the node is leader, it will send heartbeat to all the nodes.
     for (auto &&client : rpc_clients_map) {
-      if (client.second && client.first != my_id) {
+      if (client.second != nullptr && client.first != my_id) {
         AppendEntriesArgs<Command> arg(current_term, my_id,
                                        log_entries.back().index,
                                        log_entries.back().term, {}, commit_idx);
@@ -393,7 +395,7 @@ void RaftNode<StateMachine, Command>::get_random_timeout() {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> can(150, 300);
-  std::uniform_int_distribution<> fol(700, 900);
+  std::uniform_int_distribution<> fol(400, 700);
 
   candidate_timeout = can(gen);
   follower_timeout = fol(gen);
@@ -407,6 +409,8 @@ void RaftNode<StateMachine, Command>::convert_to_follower(int term) {
   role = RaftRole::Follower;
   current_term = term;
   voted_for = -1;
+
+  get_random_timeout();
 }
 /******************************************************************
 
@@ -547,9 +551,12 @@ void RaftNode<StateMachine, Command>::handle_append_entries_reply(
   if (reply.success) {
     match_idx[node_id] = std::max(match_idx[node_id],
                                   (int)arg.entries.size() + arg.prevLogIndex);
-    match_count[node_id] = true;
+    if (match_idx[node_id] > commit_idx) {
+      match_count[node_id] = true;
+    }
     int matched_num =
         std::accumulate(match_count.begin(), match_count.end(), 0);
+    RAFT_LOG("matched num: %d", matched_num);
     if (matched_num > match_count.size() / 2) {
       commit_idx = std::max(commit_idx, match_idx[my_id]);
       match_count.assign(match_count.size(), false);
@@ -694,7 +701,7 @@ void RaftNode<StateMachine, Command>::run_background_commit() {
       if (role == RaftRole::Leader) {
         // if the node is leader, it will send logs to all the nodes.
         for (auto &&client : rpc_clients_map) {
-          if (client.second && client.first != my_id) {
+          if (client.second != nullptr && client.first != my_id) {
             int lbound_idx = match_idx[client.first];
             std::vector<log_entry<Command>> entries;
             entries.assign(log_entries.begin() + lbound_idx + 1,
@@ -735,6 +742,7 @@ void RaftNode<StateMachine, Command>::run_background_apply() {
       lock.lock();
       if (commit_idx > last_applied_idx) {
         for (int i = last_applied_idx + 1; i <= commit_idx; i++) {
+          RAFT_LOG("apply log %d, term %d", i, log_entries[i].term);
           state->apply_log(log_entries[i].command);
         }
         last_applied_idx = commit_idx;
