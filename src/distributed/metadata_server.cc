@@ -67,6 +67,7 @@ inline auto MetadataServer::init_fs(const std::string &data_path) {
      * a root directory.
      */
     auto init_res = operation_->alloc_inode(InodeType::Directory);
+    std::cout << "alloc success" << std::endl;
     if (init_res.is_err()) {
       std::cerr << "Cannot allocate inode for root directory." << std::endl;
       exit(1);
@@ -173,7 +174,7 @@ auto MetadataServer::lookup(inode_id_t parent, const std::string &name)
     -> inode_id_t {
   // TODO: Implement this function.
   auto res = operation_->lookup(parent, name.data());
-
+  // std::cout << "lookup inode : " << (res.is_ok() ? res.unwrap() : 0) << std::endl; 
   return res.is_ok() ? res.unwrap() : 0;
 }
 
@@ -276,18 +277,29 @@ auto MetadataServer::readdir(inode_id_t node)
 auto MetadataServer::get_type_attr(inode_id_t id)
     -> std::tuple<u64, u64, u64, u64, u8> {
   // TODO: Implement this function.
-  (*two_phase_locks)[-1].lock();
-  block_id_t metadata_bid = operation_->inode_manager_->get(id).unwrap();
-  // read the inode data
-  usize block_size = operation_->block_manager_->block_size();
-  u8 inode_data[block_size];
-  (*two_phase_locks)[metadata_bid].lock();
-  operation_->block_manager_->read_block(metadata_bid, inode_data);
-  Inode *inode_ptr = (Inode*)(inode_data);
-  FileAttr attr = inode_ptr->get_attr();
-  (*two_phase_locks)[metadata_bid].unlock();
-  (*two_phase_locks)[-1].unlock();
-  return {attr.size, attr.atime, attr.ctime, attr.mtime, (u8)inode_ptr->get_type()};
+  std::tuple<u64, u64, u64, u64, u8> result = {};
+  
+  auto get_inode_block_id_res = operation_->inode_manager_->get(id);
+  if(get_inode_block_id_res.is_err()) {
+    std::cout << "In MetadataServer::get_type_attr, get targte inode id block error!" << std::endl;
+    return result;
+  }
+  const block_id_t inode_block_id = get_inode_block_id_res.unwrap();
+  std::vector<u8> inode(operation_->block_manager_->block_size());
+  operation_->block_manager_->read_block(inode_block_id, inode.data());
+  Inode *inode_p = reinterpret_cast<Inode *>(inode.data());
+  u8 short_type = inode_p->get_type() == InodeType::Directory ? DirectoryType : RegularFileType;
+  FileAttr attr = inode_p->get_attr();
+  if(inode_p->get_type() == InodeType::Directory) {
+    result = {attr.atime, attr.mtime, attr.ctime, attr.size, short_type};
+  } else if(inode_p->get_type() == InodeType::FILE){
+    auto m_a_p = get_block_map(id);
+    result = {attr.atime, attr.mtime, attr.ctime, m_a_p.size() * 4096, short_type};
+  } else {
+    std::cout << "In MetadataServer::get_type_attr, encounter unknown type" << std::endl;
+    return {};
+  }
+  return result;
 }
 
 auto MetadataServer::reg_server(const std::string &address, u16 port,

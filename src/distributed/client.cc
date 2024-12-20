@@ -2,6 +2,7 @@
 #include "common/macros.h"
 #include "common/util.h"
 #include "distributed/metadata_server.h"
+#include "metadata/inode.h"
 
 namespace chfs {
 
@@ -80,10 +81,10 @@ auto ChfsClient::get_type_attr(inode_id_t id)
   if(get_type_attr_res.is_err()) {
     return ErrorType::BadResponse;
   }
-  auto res = get_type_attr_res.unwrap()->as<std::pair<u32, std::tuple<u64, u64, u64, u64>>>();
+  auto res = get_type_attr_res.unwrap()->as<std::tuple<u64, u64, u64, u64, u8>>();
+  auto [atime, mtime, ctime, size, type] = res;
   std::pair<InodeType, FileAttr> trans_res;
-  trans_res.first = InodeType(res.first);
-  auto [atime, mtime, ctime, size] = res.second;
+  trans_res.first = InodeType(type);
   trans_res.second.atime = atime;
   trans_res.second.ctime = ctime;
   trans_res.second.mtime = mtime;
