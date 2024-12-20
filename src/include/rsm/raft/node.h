@@ -147,7 +147,7 @@ private:
   std::unique_ptr<std::thread> background_apply;
 
   /* Lab3: Your code here */
-  int commit_idx{-1};
+  int commit_idx{0};
   int voted_for{-1};
   std::vector<bool> vote_result;
   std::vector<bool> match_count;
@@ -210,7 +210,7 @@ RaftNode<StateMachine, Command>::RaftNode(int node_id,
   });
 
   /* Lab3: Your code here */
-  thread_pool = std::make_unique<ThreadPool>(32);
+  thread_pool = std::make_unique<ThreadPool>(1);
   state = std::make_unique<StateMachine>();
   election_timer = get_current_timer();
   get_random_timeout();
@@ -220,7 +220,13 @@ RaftNode<StateMachine, Command>::RaftNode(int node_id,
       "/tmp/raft_log/node_" + std::to_string(my_id));
   log_storage = std::make_unique<RaftLog<Command>>(bm);
 
-  log_entries.push_back(log_entry<Command>(0, 0, Command()));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+
+  log_storage->read_all(current_term, voted_for, log_entries);
+
+  RAFT_LOG("construct node");
+
   match_count.resize(configs.size(), false);
   vote_result.resize(configs.size(), false);
 
@@ -229,6 +235,8 @@ RaftNode<StateMachine, Command>::RaftNode(int node_id,
 
 template <typename StateMachine, typename Command>
 RaftNode<StateMachine, Command>::~RaftNode() {
+  RAFT_LOG("destruct node");
+
   stop();
 
   thread_pool.reset();
@@ -265,12 +273,15 @@ auto RaftNode<StateMachine, Command>::start() -> int {
   background_apply =
       std::make_unique<std::thread>(&RaftNode::run_background_apply, this);
 
+
   return 0;
 }
 
 template <typename StateMachine, typename Command>
 auto RaftNode<StateMachine, Command>::stop() -> int {
   /* Lab3: Your code here */
+  RAFT_LOG("stop node.");
+
   stopped.store(true);
   if (background_election) {
     background_election->join();
@@ -320,6 +331,7 @@ auto RaftNode<StateMachine, Command>::new_command(std::vector<u8> cmd_data,
 
     log_entry<Command> entry(current_term, log_idx, cmd);
     log_entries.push_back(entry);
+    log_storage->write_log(log_entries);
 
     match_idx[my_id] = log_entries.back().index;
     match_count[my_id] = true;
@@ -351,6 +363,8 @@ void RaftNode<StateMachine, Command>::start_election() {
   role = RaftRole::Candidate;
   current_term++;
   voted_for = my_id;
+  log_storage->write_metadata(current_term, voted_for);
+  RAFT_LOG("vote for node %d, term %d", my_id, current_term);
 
   vote_result.assign(rpc_clients_map.size(), false);
   vote_result[my_id] = true;
@@ -410,6 +424,8 @@ void RaftNode<StateMachine, Command>::convert_to_follower(int term) {
   current_term = term;
   voted_for = -1;
 
+  log_storage->write_metadata(current_term, voted_for);
+
   get_random_timeout();
 }
 /******************************************************************
@@ -423,7 +439,6 @@ auto RaftNode<StateMachine, Command>::request_vote(RequestVoteArgs args)
     -> RequestVoteReply {
   /* Lab3: Your code here */
   std::unique_lock<std::mutex> lock(mtx);
-  election_timer = get_current_timer();
 
   if (args.term < current_term) {
     return RequestVoteReply(current_term, false);
@@ -437,7 +452,8 @@ auto RaftNode<StateMachine, Command>::request_vote(RequestVoteArgs args)
          args.lastLogIndex >= log_entries.back().index)) {
       RAFT_LOG("vote for node %d, term %d", args.candidateId, current_term);
       voted_for = args.candidateId;
-
+      log_storage->write_metadata(current_term, voted_for);
+      election_timer = get_current_timer();
       return RequestVoteReply(args.term, true);
     }
   }
@@ -465,6 +481,10 @@ void RaftNode<StateMachine, Command>::handle_request_vote_reply(
     if (votes > node_configs.size() / 2) {
       role = RaftRole::Leader;
       RAFT_LOG("become leader, term %d", current_term);
+      match_idx.assign(match_idx.size(), 0);
+      match_count.assign(match_count.size(), false);
+      match_idx[my_id] = log_entries.back().index;
+
       send_heartbeat();
       vote_result.assign(node_configs.size(), false);
     }
@@ -522,6 +542,7 @@ auto RaftNode<StateMachine, Command>::append_entries(
                      args.entries.end());
   // if leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of
   // last new entry)
+  log_storage->write_log(log_entries);
   if (args.leaderCommit > commit_idx) {
     commit_idx = std::min(rpc_arg.leaderCommit, log_entries.back().index);
   }
@@ -666,6 +687,7 @@ void RaftNode<StateMachine, Command>::run_background_election() {
       lock.lock();
       uint64_t current_timer = get_current_timer();
       if (role == RaftRole::Follower) {
+        // RAFT_LOG("follower current time diff election time: %ld", current_timer - election_timer)
         if (current_timer - election_timer > follower_timeout) {
           start_election();
         }

@@ -9,7 +9,7 @@ class RaftTestDebug: public RaftTest {};
 
 class RaftTestPart1: public RaftTest {};
 
-TEST_F(RaftTestPart1, DISABLED_LeaderElection)
+TEST_F(RaftTestPart1, LeaderElection)
 {
   InitNodes(3);
 
@@ -26,7 +26,7 @@ TEST_F(RaftTestPart1, DISABLED_LeaderElection)
   EXPECT_GE(CheckOneLeader(), 0);
 }
 
-TEST_F(RaftTestPart1, DISABLED_ReElection)
+TEST_F(RaftTestPart1, ReElection)
 {
   InitNodes(5);
 
@@ -63,7 +63,7 @@ TEST_F(RaftTestPart1, DISABLED_ReElection)
 
 class RaftTestPart2: public RaftTest {};
 
-TEST_F(RaftTestPart2, DISABLED_BasicAgree)
+TEST_F(RaftTestPart2, BasicAgree)
 {
   int node_num = 3;
 
@@ -78,7 +78,7 @@ TEST_F(RaftTestPart2, DISABLED_BasicAgree)
   }
 }
 
-TEST_F(RaftTestPart2, DISABLED_FailAgreement)
+TEST_F(RaftTestPart2, FailAgreement)
 {
   int node_num = 3;
 
@@ -101,7 +101,7 @@ TEST_F(RaftTestPart2, DISABLED_FailAgreement)
   ASSERT_GE(AppendNewCommand(107, node_num), 0);
 }
 
-TEST_F(RaftTestPart2, DISABLED_FailNoAgreement)
+TEST_F(RaftTestPart2, FailNoAgreement)
 {
   int node_num = 5;
 
@@ -150,7 +150,7 @@ TEST_F(RaftTestPart2, DISABLED_FailNoAgreement)
   ASSERT_GE(AppendNewCommand(1000, node_num), 0);
 }
 
-TEST_F(RaftTestPart2, DISABLED_ConcurrentStarts)
+TEST_F(RaftTestPart2, ConcurrentStarts)
 {
   int node_num = 3;
 
