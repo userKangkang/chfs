@@ -76,18 +76,46 @@ BlockManager::BlockManager(const std::string &file, usize block_cnt)
   CHFS_ASSERT(this->block_data != MAP_FAILED, "Failed to mmap the data");
 }
 
-BlockManager::BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled)
-    : file_name_(file), block_cnt(block_cnt), in_memory(false) {
+BlockManager::BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled
+        , std::shared_ptr<usize> global_txn_number)
+    : file_name_(file), block_cnt(block_cnt), in_memory(false),
+    global_txn_number_(global_txn_number) {
   this->write_fail_cnt = 0;
   this->maybe_failed = false;
+  this->fd = open(file.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
   // TODO: Implement this function.
-  UNIMPLEMENTED();    
+  CHFS_ASSERT(this->fd != -1, "Failed to open the block manager file");
+
+  auto file_sz = get_file_sz(this->file_name_);
+  // reserve for logging.
+
+  if(is_log_enabled) {
+    log_metadata_block = this->block_cnt;
+    log_start_block = this->block_cnt + redo_metadata_block_num;
+    this->block_cnt += redo_log_block_num + redo_metadata_block_num;
+  }
+  if (file_sz == 0) {
+    initialize_file(this->fd, this->total_storage_sz());
+  } else {
+    this->block_cnt = file_sz / this->block_sz;
+    CHFS_ASSERT(this->total_storage_sz() == (KDefaultBlockCnt + redo_metadata_block_num + redo_log_block_num) * this->block_sz,
+                "The file size mismatches");
+  }
+
+  this->block_data =
+      static_cast<u8 *>(mmap(nullptr, this->total_storage_sz(),
+                             PROT_READ | PROT_WRITE, MAP_SHARED, this->fd, 0));
+  CHFS_ASSERT(this->block_data != MAP_FAILED, "Failed to mmap the data");
+  
 }
 
 auto BlockManager::write_block(block_id_t block_id, const u8 *data)
     -> ChfsNullResult {
   if (this->maybe_failed && block_id < this->block_cnt) {
+    append_redo_log(*global_txn_number_, block_id, data);
+    this->write_fail_cnt++;
     if (this->write_fail_cnt >= 3) {
+      is_write_fail_per_txn = true;
       this->write_fail_cnt = 0;
       return ErrorType::INVALID;
     }
@@ -95,8 +123,9 @@ auto BlockManager::write_block(block_id_t block_id, const u8 *data)
   
 
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-  this->write_fail_cnt++;
+  const char *ptr = (char*)&(this->block_data[block_id * block_sz]);
+  memcpy((char*)ptr, (char*)data, this->block_sz);
+
   return KNullOk;
 }
 
@@ -104,22 +133,33 @@ auto BlockManager::write_partial_block(block_id_t block_id, const u8 *data,
                                        usize offset, usize len)
     -> ChfsNullResult {
   if (this->maybe_failed && block_id < this->block_cnt) {
+    // strange...
+    u8 tmp[block_sz];
+    read_block(block_id, tmp);
+    const u8 *p = tmp + offset;
+    memcpy((void*)p, (void*)data, len);
+    append_redo_log(*global_txn_number_, block_id, tmp);
+
+    this->write_fail_cnt++;
     if (this->write_fail_cnt >= 3) {
       this->write_fail_cnt = 0;
+      is_write_fail_per_txn = true;
       return ErrorType::INVALID;
     }
   }
 
   // TODO: Implement this function.
-  UNIMPLEMENTED();
-  this->write_fail_cnt++;
+  const u8 *ptr = &(this->block_data[block_id * block_sz]) + offset; 
+  memcpy((char*)ptr, (char*)data, len);
+
   return KNullOk;
 }
 
 auto BlockManager::read_block(block_id_t block_id, u8 *data) -> ChfsNullResult {
 
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  char *ptr = (char*)&(this->block_data[block_id * block_sz]);
+  memcpy((char*)data, ptr, this->block_sz);
 
   return KNullOk;
 }
@@ -127,7 +167,7 @@ auto BlockManager::read_block(block_id_t block_id, u8 *data) -> ChfsNullResult {
 auto BlockManager::zero_block(block_id_t block_id) -> ChfsNullResult {
   
   // TODO: Implement this function.
-  UNIMPLEMENTED();
+  memset(this->block_data + (this->block_sz * block_id), '\0', this->block_sz);
 
   return KNullOk;
 }
@@ -149,6 +189,69 @@ auto BlockManager::flush() -> ChfsNullResult {
   if (res != 0)
     return ChfsNullResult(ErrorType::INVALID);
   return KNullOk;
+}
+
+auto BlockManager::append_redo_log(txn_id_t txn_id, block_id_t block_id, const u8 *vector) -> void {
+  auto origin_fail_cnt = this->write_fail_cnt;
+  this->maybe_failed = false;
+  
+
+  usize log_block_index = log_block_txns.size() + this->log_start_block;
+  usize log_metadata_index = log_block_txns.size() / redo_metadata_num_per_block + this->log_metadata_block;
+  usize log_metadata_offset = log_block_txns.size() % redo_metadata_num_per_block;
+  // write data to blocks
+  log_block_txns.push_back({txn_id, block_id});
+  write_block(log_block_index, vector);
+  sync(log_block_index);
+  // write metadata to blocks.
+  u8 metadata[16];
+  (*(u64*)metadata) = txn_id;
+  (*(u64*)(metadata + sizeof(u64))) = block_id;
+  write_partial_block(log_metadata_index, metadata, log_metadata_offset, 2 * sizeof(u64));
+  sync(log_metadata_index);
+
+  this->write_fail_cnt = origin_fail_cnt;
+  this->maybe_failed = true;
+}
+
+auto BlockManager::recover() -> void {
+
+  auto origin_fail_cnt = this->write_fail_cnt;
+  auto origin_failed = this->maybe_failed;
+  if(origin_failed) {
+    this->maybe_failed = false;
+  }
+  
+  usize current_lm_index = 0;
+  while(current_lm_index < redo_metadata_block_num) {
+    u8 log_metadata[block_sz];
+    read_block(this->log_metadata_block + current_lm_index, log_metadata);
+    for(usize i = 0; i < block_sz; i += 16) {
+      u64 txn_number = *(u64*)(log_metadata + i);
+      u64 block_id = *(u64*)(log_metadata + i + sizeof(u64));
+      if(block_id == 0) {
+        zero_block(this->log_metadata_block + current_lm_index);
+        break;
+      }
+      log_block_txns.push_back({txn_number, block_id});
+    }
+    zero_block(this->log_metadata_block + current_lm_index);
+    current_lm_index++;
+  }
+
+  std::vector<u8> v(block_sz);
+  for(usize i = 0; i < log_block_txns.size(); i++) {
+    read_block(log_start_block + i, v.data());
+    write_block(log_block_txns[i].second, v.data());
+    sync(log_block_txns[i].second);
+  }
+
+  log_block_txns.clear();
+
+  this->write_fail_cnt = origin_fail_cnt;
+  if(origin_failed) {
+    this->maybe_failed = true;
+  }
 }
 
 BlockManager::~BlockManager() {

@@ -3,12 +3,15 @@
 
 namespace chfs {
 
+std::stack<block_id_t> FileOperation::not_to_lock;
+
 FileOperation::FileOperation(std::shared_ptr<BlockManager> bm,
                              u64 max_inode_supported)
     : block_manager_(bm), inode_manager_(std::shared_ptr<InodeManager>(
                               new InodeManager(bm, max_inode_supported))),
       block_allocator_(std::shared_ptr<BlockAllocator>(
-          new BlockAllocator(bm, inode_manager_->get_reserved_blocks()))) {
+          new BlockAllocator(bm, inode_manager_->get_reserved_blocks()))),
+          two_phase_locks_(nullptr) {
   // now initialize the superblock
   SuperBlock(bm, inode_manager_->get_max_inode_supported()).flush(0).unwrap();
 }
@@ -46,13 +49,15 @@ auto FileOperation::get_free_blocks_num() const -> ChfsResult<u64> {
   return ChfsResult<u64>(block_allocator_->free_block_cnt());
 }
 
-auto FileOperation::remove_file(inode_id_t id) -> ChfsNullResult {
+auto FileOperation::remove_file(inode_id_t id, std::stack<block_id_t> &s) -> ChfsNullResult {
   auto error_code = ErrorType::DONE;
   const auto block_size = this->block_manager_->block_size();
 
   std::vector<u8> inode(block_size);
 
   std::vector<block_id_t> free_set;
+
+  bool to_lock = (&s != &not_to_lock);
 
   auto inode_p = reinterpret_cast<Inode *>(inode.data());
   auto inode_res = this->inode_manager_->read_inode(id, inode);
@@ -61,6 +66,12 @@ auto FileOperation::remove_file(inode_id_t id) -> ChfsNullResult {
     // I know goto is bad, but we have no choice
     goto err_ret;
   }
+
+  if(to_lock) {
+    s.push(inode_res.unwrap());
+    lock_opr(inode_res.unwrap());
+  }
+  
 
   for (uint i = 0; i < inode_p->get_direct_block_num(); ++i) {
     if (inode_p->blocks[i] == KInvalidBlockID) {
@@ -72,6 +83,12 @@ auto FileOperation::remove_file(inode_id_t id) -> ChfsNullResult {
   if (inode_p->blocks[inode_p->get_direct_block_num()] != KInvalidBlockID) {
     // we still need to release the indirect block
     std::vector<u8> indirect_block;
+    if(to_lock) {
+      s.push(inode_p->blocks[inode_p->get_direct_block_num()]);
+      lock_opr(inode_p->blocks[inode_p->get_direct_block_num()]);
+    }
+    
+
     auto read_res = this->block_manager_->read_block(
         inode_p->blocks[inode_p->get_direct_block_num()],
         indirect_block.data());
@@ -103,6 +120,10 @@ auto FileOperation::remove_file(inode_id_t id) -> ChfsNullResult {
 
   // now free the blocks
   for (auto bid : free_set) {
+    if(to_lock && (bid != inode_res.unwrap() && bid != inode_p->blocks[inode_p->get_direct_block_num()])) {
+      s.push(bid);
+      lock_opr(bid);
+    }
     auto res = this->block_allocator_->deallocate(bid);
     if (res.is_err()) {
       return res;

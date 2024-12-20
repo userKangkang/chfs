@@ -52,6 +52,7 @@ TEST_F(DataServerTest, AllocateAndDelete) {
       res.unwrap()->as<std::pair<block_id_t, version_t>>();
   EXPECT_EQ(block_id, realloc_id);
   EXPECT_EQ(new_version, 3);
+
 }
 
 TEST_F(DataServerTest, ReadAndWrite) {

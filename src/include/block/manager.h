@@ -12,7 +12,7 @@
 #pragma once
 
 #include <vector>
-
+#include <memory>
 #include "common/config.h"
 #include "common/macros.h"
 #include "common/result.h"
@@ -32,6 +32,10 @@ class BlockManager {
 protected:
   const usize block_sz = 4096;
 
+  const usize redo_log_block_num = 1024;
+  const usize redo_metadata_num_per_block = 256; // txn_id | block_id / -1 (commit flag)
+  const usize redo_metadata_block_num = 4;
+
   std::string file_name_;
   int fd;
   u8 *block_data;
@@ -39,6 +43,13 @@ protected:
   bool in_memory; // whether we use in-memory to emulate the block manager
   bool maybe_failed;
   usize write_fail_cnt;
+
+  // for redo-log.
+  [[maybe_unused]] usize log_start_block{0};
+  [[maybe_unused]] std::vector<std::pair<block_id_t, txn_id_t>> log_block_txns;
+  [[maybe_unused]] usize log_metadata_block{0};
+  [[maybe_unused]] std::shared_ptr<usize> global_txn_number_;
+  [[maybe_unused]] bool is_write_fail_per_txn{false};
 
 public:
   /**
@@ -74,7 +85,12 @@ public:
    * @param block_cnt the number of blocks in the device
    * @param is_log_enabled whether to enable log
    */
-  BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled);
+  BlockManager(const std::string &file, usize block_cnt, bool is_log_enabled
+    , std::shared_ptr<usize> global_txn_number = nullptr);
+   
+  /**
+   * Set Coomit Log.
+   */
 
   virtual ~BlockManager();
 
@@ -141,6 +157,42 @@ public:
    */
   auto set_may_fail(bool may_fail) -> void {
     this->maybe_failed = may_fail;
+  }
+
+  /**
+   * Append redo-log.
+   * 
+   * @param txn_id: transaction id of the modification of block.
+   * @param block_id: id of modified block.
+   * @param vector: modified data of the block.
+   */
+  auto append_redo_log(txn_id_t txn_id, block_id_t block_id, const u8* vector) -> void;
+
+  /**
+   * Recover data by redo-log.
+   */
+  auto recover() -> void;
+
+  /**
+   * Return whether the write error occurs in single tnx,
+   * and then set it false.
+   */
+  auto is_write_fail_txn() -> bool {
+    if(!maybe_failed) {
+      return false;
+    }
+    if(is_write_fail_per_txn) {
+      is_write_fail_per_txn = false;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get log entry size.
+   */
+  auto get_log_entry_size() -> usize {
+    return log_block_txns.size();
   }
 };
 

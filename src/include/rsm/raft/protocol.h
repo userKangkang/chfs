@@ -20,52 +20,146 @@ const std::string RAFT_RPC_INSTALL_SNAPSHOT = "install snapshot";
 struct RequestVoteArgs {
     /* Lab3: Your code here */
     
+    int term;
+    int candidateId;
+    int lastLogIndex;
+    int lastLogTerm;
+
     MSGPACK_DEFINE(
-    
+        term,
+        candidateId,
+        lastLogIndex,
+        lastLogTerm
     )
+
+    RequestVoteArgs() {}
+
+    RequestVoteArgs(int term, int candidateId, int lastLogIndex, int lastLogTerm):
+        term(term), candidateId(candidateId), lastLogIndex(lastLogIndex), lastLogTerm(lastLogTerm) {}
 };
 
 struct RequestVoteReply {
     /* Lab3: Your code here */
 
+    int term;
+    int voteGranted;
+
     MSGPACK_DEFINE(
-    
+        term,
+        voteGranted
     )
+
+    RequestVoteReply() {}
+
+    RequestVoteReply(int term, int voteGranted):
+        term(term), voteGranted(voteGranted) {}
 };
 
 template <typename Command>
 struct AppendEntriesArgs {
     /* Lab3: Your code here */
+    int term;
+    int leaderId;
+    int prevLogIndex;
+    int prevLogTerm;
+    std::vector<log_entry<Command>> entries;
+    int leaderCommit;
+
+    AppendEntriesArgs() {}
+
+    AppendEntriesArgs(int term, int leaderId, int prevLogIndex, int prevLogTerm, std::vector<log_entry<Command>> entries, int leaderCommit):
+        term(term), leaderId(leaderId), prevLogIndex(prevLogIndex), prevLogTerm(prevLogTerm), entries(entries), leaderCommit(leaderCommit) {}
 };
 
 struct RpcAppendEntriesArgs {
     /* Lab3: Your code here */
 
+    int term;
+    int leaderId;
+    int prevLogIndex;
+    int prevLogTerm;
+    std::vector<int> entries_index;
+    std::vector<int> entries_term;
+    std::vector<int> entries_command;
+    int leaderCommit;
+
     MSGPACK_DEFINE(
-    
+        term,
+        leaderId,
+        prevLogIndex,
+        prevLogTerm,
+        entries_index,
+        entries_term,
+        entries_command,
+        leaderCommit
     )
+
+    RpcAppendEntriesArgs() {}
 };
 
 template <typename Command>
 RpcAppendEntriesArgs transform_append_entries_args(const AppendEntriesArgs<Command> &arg)
 {
     /* Lab3: Your code here */
-    return RpcAppendEntriesArgs();
+
+    std::vector<int> entries_index;
+    std::vector<int> entries_term;
+    std::vector<int> entries_command;
+
+    for (auto &&entry: arg.entries) {
+        entries_index.push_back(entry.index);
+        entries_term.push_back(entry.term);
+        entries_command.push_back(entry.command.value);
+    }
+
+    RpcAppendEntriesArgs rpc_arg;
+
+    rpc_arg.term = arg.term;
+    rpc_arg.leaderId = arg.leaderId;
+    rpc_arg.prevLogIndex = arg.prevLogIndex;
+    rpc_arg.prevLogTerm = arg.prevLogTerm;
+    rpc_arg.entries_index = entries_index;
+    rpc_arg.entries_term = entries_term;
+    rpc_arg.entries_command = entries_command;
+    rpc_arg.leaderCommit = arg.leaderCommit;
+
+    return rpc_arg;
 }
 
 template <typename Command>
 AppendEntriesArgs<Command> transform_rpc_append_entries_args(const RpcAppendEntriesArgs &rpc_arg)
 {
     /* Lab3: Your code here */
-    return AppendEntriesArgs<Command>();
+    std::vector<log_entry<Command>> entries;
+
+    for (int i = 0; i < rpc_arg.entries_index.size(); i++) {
+        entries.push_back(log_entry<Command>(rpc_arg.entries_term[i], rpc_arg.entries_index[i], rpc_arg.entries_command[i]));
+    }
+
+    return AppendEntriesArgs<Command>(
+        rpc_arg.term,
+        rpc_arg.leaderId,
+        rpc_arg.prevLogIndex,
+        rpc_arg.prevLogTerm,
+        entries,
+        rpc_arg.leaderCommit
+    );
 }
 
 struct AppendEntriesReply {
     /* Lab3: Your code here */
+    int term;
+    int success;
 
     MSGPACK_DEFINE(
-    
+        term,
+        success
     )
+
+    AppendEntriesReply() {}
+
+    AppendEntriesReply(int term, int success):
+        term(term), success(success) {}
 };
 
 struct InstallSnapshotArgs {

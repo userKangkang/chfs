@@ -1,4 +1,5 @@
 #include "raft_test.h"
+#include "rsm/raft/node.h"
 
 #include <thread>
 

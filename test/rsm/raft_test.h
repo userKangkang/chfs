@@ -245,7 +245,6 @@ public:
         int temp_term;
         int temp_idx;
         std::tie(is_leader, temp_term, temp_idx) = ret2;
-
         if (is_leader) {
           log_idx = temp_idx;
           break;
