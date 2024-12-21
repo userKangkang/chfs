@@ -2,18 +2,21 @@
 #include <utility>
 #include <vector>
 #include <mutex>
+#include <queue>
 #include "librpc/client.h"
 #include "librpc/server.h"
 #include "distributed/client.h"
+
+using chfs::u32;
 
 //Lab4: Free to modify this file
 
 namespace mapReduce {
     struct KeyVal {
-        KeyVal(const std::string &key, const std::string &val) : key(key), val(val) {}
+        KeyVal(const std::string &key, const u32 &val) : key(key), val(val) {}
         KeyVal(){}
         std::string key;
-        std::string val;
+        u32 val;
     };
 
     enum mr_tasktype {
@@ -24,7 +27,7 @@ namespace mapReduce {
 
     std::vector<KeyVal> Map(const std::string &content);
 
-    std::string Reduce(const std::string &key, const std::vector<std::string> &values);
+    std::vector<KeyVal> Reduce(std::vector<std::vector<KeyVal>> &key_vals);
 
     const std::string ASK_TASK = "ask_task";
     const std::string SUBMIT_TASK = "submit_task";
@@ -51,35 +54,53 @@ namespace mapReduce {
         std::string outPutFile;
     };
 
+    enum task_stat {
+        OnGoing,
+        Done
+    };
+
     class Coordinator {
     public:
         Coordinator(MR_CoordinatorConfig config, const std::vector<std::string> &files, int nReduce);
-        std::tuple<int, int> askTask(int);
-        int submitTask(int taskType, int index);
+        std::tuple<int, int, std::vector<std::string>> askTask(int);
+        int submitTask(int taskType, int index, std::string if_filename);
         bool Done();
+        bool isMapDone();
 
     private:
         std::vector<std::string> files;
         std::mutex mtx;
         bool isFinished;
         std::unique_ptr<chfs::RpcServer> rpc_server;
+
+        int mapped_index;
+        int reduced_index;
+        int nReduce;
+
+        std::map<int, int> mapped_success_wid_index;
+        std::map<int, int> reduced_success_wid_index;
+
+        std::queue<std::string> if_files;
     };
 
     class Worker {
     public:
+        static int worker_count;
+
         explicit Worker(MR_CoordinatorConfig config);
         void doWork();
         void stop();
 
     private:
         void doMap(int index, const std::string &filename);
-        void doReduce(int index, int nfiles);
-        void doSubmit(mr_tasktype taskType, int index);
+        void doReduce(int index, std::vector<std::string> &reduce_files);
+        void doSubmit(mr_tasktype taskType, int index, std::string if_filename);
 
         std::string outPutFile;
         std::unique_ptr<chfs::RpcClient> mr_client;
         std::shared_ptr<chfs::ChfsClient> chfs_client;
         std::unique_ptr<std::thread> work_thread;
         bool shouldStop = false;
+        int worker_id;
     };
 }
